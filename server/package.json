@@ -1,0 +1,23 @@
+{
+  "name": "speedtest-server",
+  "version": "2.0.0",
+  "description": "高性能网速测试服务器",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "start:cluster": "ENABLE_CLUSTER=true node index.js",
+    "start:highload": "ENABLE_CLUSTER=true NUM_WORKERS=8 node index.js",
+    "dev": "nodemon index.js",
+    "generate-files": "node generate-test-files.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "multer": "^1.4.5-lts.1",
+    "throttle": "^1.0.3",
+    "ws": "^8.14.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  }
+} 
