@@ -5,6 +5,7 @@ import FAQPage from './pages/FAQPage';
 import LearnPage from './pages/LearnPage';
 import LeaderboardPage from './pages/LeaderboardPage';
 import Navigation from './components/Navigation';
+import ThrottleTestButton from './components/ThrottleTestButton';
 
 function App() {
   return (
@@ -35,6 +36,9 @@ function App() {
             </Routes>
           </div>
         </div>
+        
+        {/* 限速测试按钮（只在开发模式显示） */}
+        <ThrottleTestButton />
       </div>
     </Router>
   );
