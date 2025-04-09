@@ -6,7 +6,6 @@ const DEBUG_MODE = true;
 // 测速服务器配置
 const SPEED_TEST_SERVER = {
   baseUrl: 'http://localhost:3001/api',
-  wsUrl: 'ws://localhost:3001',
   endpoints: {
     info: '/server-info',
     ping: '/ping',
@@ -47,167 +46,6 @@ export interface SpeedTestResult {
   downloadDataPoints: SpeedDataPoint[];
   uploadDataPoints: SpeedDataPoint[];
 }
-
-// 全局WebSocket连接
-let wsConnection: WebSocket | null = null;
-let pingIntervalId: number | null = null;
-let packetLossTestIntervalId: number | null = null;
-
-/**
- * 初始化WebSocket连接
- */
-export const initWebSocketConnection = (): Promise<WebSocket> => {
-  return new Promise((resolve, reject) => {
-    if (wsConnection && wsConnection.readyState === WebSocket.OPEN) {
-      resolve(wsConnection);
-      return;
-    }
-
-    wsConnection = new WebSocket(SPEED_TEST_SERVER.wsUrl);
-
-    wsConnection.onopen = () => {
-      console.log('WebSocket连接已建立');
-      resolve(wsConnection!);
-    };
-
-    wsConnection.onerror = (error) => {
-      console.error('WebSocket连接错误:', error);
-      wsConnection = null;
-      reject(error);
-    };
-
-    wsConnection.onclose = () => {
-      console.log('WebSocket连接已关闭');
-      wsConnection = null;
-    };
-  });
-};
-
-/**
- * 关闭WebSocket连接
- */
-export const closeWebSocketConnection = () => {
-  if (wsConnection) {
-    wsConnection.close();
-    wsConnection = null;
-  }
-
-  if (pingIntervalId) {
-    clearInterval(pingIntervalId);
-    pingIntervalId = null;
-  }
-
-  if (packetLossTestIntervalId) {
-    clearInterval(packetLossTestIntervalId);
-    packetLossTestIntervalId = null;
-  }
-};
-
-/**
- * 测量网络延迟（ping）
- */
-export const measurePing = async (): Promise<{ ping: number; jitter: number }> => {
-  const pings: number[] = [];
-  const pingUrl = `${SPEED_TEST_SERVER.baseUrl}${SPEED_TEST_SERVER.endpoints.ping}`;
-  
-  // 执行5次ping测试
-  for (let i = 0; i < 5; i++) {
-    const start = performance.now();
-    try {
-      const response = await fetchWithThrottle(`${pingUrl}?cb=${Date.now()}`, { 
-        method: 'GET',
-        cache: 'no-store'
-      });
-      const end = performance.now();
-      const data = await response.json();
-      
-      // 减去服务器处理时间得到更准确的网络延迟
-      const networkTime = (end - start) - (data.serverProcessingTime || 0);
-      pings.push(networkTime);
-    } catch (error) {
-      console.error('Ping测试失败:', error);
-    }
-    // 等待一小段时间后再进行下一次测试
-    await new Promise(resolve => setTimeout(resolve, 200));
-  }
-  
-  // 排除最高和最低值，计算平均ping值
-  if (pings.length >= 3) {
-    pings.sort((a, b) => a - b);
-    const validPings = pings.slice(1, -1);
-    const avgPing = validPings.reduce((sum, ping) => sum + ping, 0) / validPings.length;
-    
-    // 计算抖动（ping值的标准差）
-    const pingVariance = validPings.reduce((sum, ping) => sum + Math.pow(ping - avgPing, 2), 0) / validPings.length;
-    const jitter = Math.sqrt(pingVariance);
-    
-    return { ping: Math.round(avgPing), jitter: Math.round(jitter) };
-  }
-  
-  return { ping: 0, jitter: 0 };
-};
-
-/**
- * 测试丢包率
- */
-export const measurePacketLoss = async (): Promise<number> => {
-  const packetLossUrl = `${SPEED_TEST_SERVER.baseUrl}${SPEED_TEST_SERVER.endpoints.packetLoss}`;
-  
-  const totalPackets = 50;
-  let receivedPackets = 0;
-  const timeoutMs = 2000; // 2秒超时
-  
-  // 发送多个数据包并计算收到的比例
-  for (let i = 0; i < totalPackets; i++) {
-    try {
-      const id = Date.now() + '-' + i;
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-      
-      const response = await fetchWithThrottle(`${packetLossUrl}?id=${id}&cb=${Date.now()}`, { 
-        method: 'GET',
-        cache: 'no-store',
-        signal: controller.signal
-      }).catch(() => null);
-      
-      clearTimeout(timeoutId);
-      
-      if (response && response.ok) {
-        receivedPackets++;
-      }
-    } catch (error) {
-      // 超时或请求失败视为丢包
-      console.log(`数据包 ${i} 丢失或超时`);
-    }
-    
-    // 短暂间隔避免网络拥塞
-    await new Promise(resolve => setTimeout(resolve, 50));
-  }
-  
-  // 计算丢包率（百分比）
-  const packetLossRate = ((totalPackets - receivedPackets) / totalPackets) * 100;
-  return Number(packetLossRate.toFixed(1));
-};
-
-/**
- * 确定最佳测试文件大小
- * 根据初步速度测试动态确定
- */
-const determineBestFileSize = async (
-  initialSpeedMbps: number
-): Promise<string> => {
-  if (initialSpeedMbps < 5) {
-    return TEST_SIZES.XS; // 低速连接用小文件
-  } else if (initialSpeedMbps < 20) {
-    return TEST_SIZES.S;  // 中速连接
-  } else if (initialSpeedMbps < 50) {
-    return TEST_SIZES.M;  // 高速连接
-  } else if (initialSpeedMbps < 200) {
-    return TEST_SIZES.L;  // 非常快的连接
-  } else {
-    return TEST_SIZES.XL; // 超高速连接
-  }
-};
 
 // 导入全局限速设置
 import { throttleSettings } from '../components/ThrottleTestSettings';
@@ -351,7 +189,7 @@ export const testDownloadSpeed = async (
   const speedSamples: number[] = []; 
   
   // 并发连接数（使用2个连接提高测试准确性，但不会导致结果翻倍）
-  const CONCURRENT_CONNECTIONS = 2; // 使用2个并发连接，适中的并发度
+  const CONCURRENT_CONNECTIONS = 1; // 
   let totalBytesDownloaded = 0;
   let lastProgressUpdate = testStartTime;
   let testFinished = false;
@@ -951,12 +789,84 @@ export const getServerInfo = async (): Promise<{ name: string; location: string 
 export const runSpeedTest = async (
   onProgress: SpeedTestProgressCallback
 ): Promise<SpeedTestResult> => {
+  // 进度分配 - 总进度为100%
+  // 服务器信息: 5%
+  // Ping测试: 10%
+  // 丢包率测试: 10% 
+  // 下载测试: 45%
+  // 上传测试: 30%
+  let totalProgress = 0;
+  
+  // 存储最终结果
+  let finalResult: Partial<SpeedTestResult> = {};
+  
+  // 平滑过渡设置
+  const SMOOTH_TRANSITION_INTERVAL = 50; // 更新间隔(ms)
+  const SMOOTH_TRANSITION_STEP = 0.5; // 每次更新增加的进度百分比
+  
+  // 创建平滑过渡动画
+  const smoothTransition = async (fromProgress: number, toProgress: number, stage: string) => {
+    let currentProgress = fromProgress;
+    
+    while (currentProgress < toProgress) {
+      currentProgress = Math.min(currentProgress + SMOOTH_TRANSITION_STEP, toProgress);
+      // 使用相同的stage防止进度条颜色变化
+      onProgress(stage, Math.round(currentProgress), (finalResult.uploadSpeed || undefined));
+      
+      if (currentProgress >= toProgress) break;
+      await new Promise(resolve => setTimeout(resolve, SMOOTH_TRANSITION_INTERVAL));
+    }
+  };
+  
+  // 进度更新包装函数
+  const updateProgress = async (stage: string, stageProgress: number, currentSpeed?: number, dataPoints?: SpeedDataPoint[]) => {
+    let absoluteProgress = 0;
+    
+    switch(stage) {
+      case 'init':
+        absoluteProgress = (stageProgress / 100) * 5;
+        break;
+      case 'ping':
+        absoluteProgress = 5 + (stageProgress / 100) * 10;
+        break;
+      case 'packetLoss':
+        absoluteProgress = 15 + (stageProgress / 100) * 10;
+        break;
+      case 'download':
+        absoluteProgress = 25 + (stageProgress / 100) * 45;
+        break;
+      case 'upload':
+        absoluteProgress = 70 + (stageProgress / 100) * 30;
+        break;
+      default:
+        absoluteProgress = stageProgress;
+    }
+    
+    // 如果是阶段性的100%进度，先更新到95%，然后平滑过渡
+    if (stageProgress === 100 && absoluteProgress > totalProgress + 5) {
+      const transitionTo = absoluteProgress - 5;
+      if (transitionTo > totalProgress) {
+        await smoothTransition(totalProgress, transitionTo, stage);
+        totalProgress = transitionTo;
+      }
+    }
+    
+    // 更新总进度
+    if (Math.round(absoluteProgress) > totalProgress) {
+      totalProgress = Math.round(absoluteProgress);
+      
+      // 始终显示当前速度，不管是什么阶段
+      onProgress(stage, totalProgress, currentSpeed, dataPoints);
+    }
+  };
+  
   // 0. 获取服务器信息
   let serverInfo: { name: string; location: string } = { 
     name: '高性能测速服务器', 
     location: '未知位置' 
   };
   
+  updateProgress('init', 0);
   try {
     const info = await getServerInfo();
     if (info) {
@@ -965,24 +875,60 @@ export const runSpeedTest = async (
   } catch (error) {
     console.error('无法获取服务器信息:', error);
   }
+  await updateProgress('init', 100);
   
   // 1. 测量ping
-  onProgress('ping', 0);
   const { ping, jitter } = await measurePing();
-  onProgress('ping', 100);
+  finalResult.ping = ping;
+  finalResult.jitter = jitter;
+  await updateProgress('ping', 100);
   
   // 2. 测试丢包率
-  onProgress('packetLoss', 0);
   const packetLoss = await measurePacketLoss();
-  onProgress('packetLoss', 100);
+  finalResult.packetLoss = packetLoss;
+  await updateProgress('packetLoss', 100);
   
   // 3. 测试下载速度
+  const progressDownloadCallback = (stage: string, progress: number, speed?: number, dataPoints?: SpeedDataPoint[]) => {
+    updateProgress('download', progress, speed, dataPoints);
+    if (progress === 100 && speed !== undefined) {
+      finalResult.downloadSpeed = speed;
+      finalResult.downloadDataPoints = dataPoints || [];
+    }
+  };
+  
   const { speed: downloadSpeed, dataPoints: downloadDataPoints } = 
-    await testDownloadSpeed(onProgress);
+    await testDownloadSpeed(progressDownloadCallback);
+  
+  finalResult.downloadSpeed = downloadSpeed;
+  finalResult.downloadDataPoints = downloadDataPoints;
+  
+  // 下载完成后，平滑过渡到上传阶段
+  await smoothTransition(totalProgress, 70, 'download');
   
   // 4. 测试上传速度
+  const progressUploadCallback = (stage: string, progress: number, speed?: number, dataPoints?: SpeedDataPoint[]) => {
+    // 始终传递真实速度值
+    updateProgress('upload', progress, speed, dataPoints);
+    if (progress === 100 && speed !== undefined) {
+      finalResult.uploadSpeed = speed;
+      finalResult.uploadDataPoints = dataPoints || [];
+    }
+  };
+  
   const { speed: uploadSpeed, dataPoints: uploadDataPoints } = 
-    await testUploadSpeed(onProgress);
+    await testUploadSpeed(progressUploadCallback);
+  
+  finalResult.uploadSpeed = uploadSpeed;
+  finalResult.uploadDataPoints = uploadDataPoints;
+  
+  // 上传测试完成后，平滑过渡到100%
+  if (totalProgress < 100) {
+    await smoothTransition(totalProgress, 100, 'upload');
+    
+    // 最终更新一次，显示上传速度
+    onProgress('upload', 100, uploadSpeed || undefined, uploadDataPoints);
+  }
   
   // 返回完整结果
   return {
@@ -996,4 +942,90 @@ export const runSpeedTest = async (
     downloadDataPoints,
     uploadDataPoints
   };
+};
+
+/**
+ * 测量网络延迟（ping）
+ */
+export const measurePing = async (): Promise<{ ping: number; jitter: number }> => {
+  const pings: number[] = [];
+  const pingUrl = `${SPEED_TEST_SERVER.baseUrl}${SPEED_TEST_SERVER.endpoints.ping}`;
+  
+  // 执行5次ping测试
+  for (let i = 0; i < 5; i++) {
+    const start = performance.now();
+    try {
+      const response = await fetchWithThrottle(`${pingUrl}?cb=${Date.now()}`, { 
+        method: 'GET',
+        cache: 'no-store'
+      });
+      const end = performance.now();
+      const data = await response.json();
+      
+      // 减去服务器处理时间得到更准确的网络延迟
+      const networkTime = (end - start) - (data.serverProcessingTime || 0);
+      pings.push(networkTime);
+    } catch (error) {
+      console.error('Ping测试失败:', error);
+    }
+    // 等待一小段时间后再进行下一次测试
+    await new Promise(resolve => setTimeout(resolve, 200));
+  }
+  
+  // 排除最高和最低值，计算平均ping值
+  if (pings.length >= 3) {
+    pings.sort((a, b) => a - b);
+    const validPings = pings.slice(1, -1);
+    const avgPing = validPings.reduce((sum, ping) => sum + ping, 0) / validPings.length;
+    
+    // 计算抖动（ping值的标准差）
+    const pingVariance = validPings.reduce((sum, ping) => sum + Math.pow(ping - avgPing, 2), 0) / validPings.length;
+    const jitter = Math.sqrt(pingVariance);
+    
+    return { ping: Math.round(avgPing), jitter: Math.round(jitter) };
+  }
+  
+  return { ping: 0, jitter: 0 };
+};
+
+/**
+ * 测试丢包率
+ */
+export const measurePacketLoss = async (): Promise<number> => {
+  const packetLossUrl = `${SPEED_TEST_SERVER.baseUrl}${SPEED_TEST_SERVER.endpoints.packetLoss}`;
+  
+  const totalPackets = 50;
+  let receivedPackets = 0;
+  const timeoutMs = 2000; // 2秒超时
+  
+  // 发送多个数据包并计算收到的比例
+  for (let i = 0; i < totalPackets; i++) {
+    try {
+      const id = Date.now() + '-' + i;
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+      
+      const response = await fetchWithThrottle(`${packetLossUrl}?id=${id}&cb=${Date.now()}`, { 
+        method: 'GET',
+        cache: 'no-store',
+        signal: controller.signal
+      }).catch(() => null);
+      
+      clearTimeout(timeoutId);
+      
+      if (response && response.ok) {
+        receivedPackets++;
+      }
+    } catch (error) {
+      // 超时或请求失败视为丢包
+      console.log(`数据包 ${i} 丢失或超时`);
+    }
+    
+    // 短暂间隔避免网络拥塞
+    await new Promise(resolve => setTimeout(resolve, 50));
+  }
+  
+  // 计算丢包率（百分比）
+  const packetLossRate = ((totalPackets - receivedPackets) / totalPackets) * 100;
+  return Number(packetLossRate.toFixed(1));
 }; 

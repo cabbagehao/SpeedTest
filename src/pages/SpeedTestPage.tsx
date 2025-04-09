@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Download, Upload, Gauge, RefreshCw, Zap, AlertCircle, X } from 'lucide-react';
-import { runSpeedTest, type SpeedTestResult, SpeedDataPoint, initWebSocketConnection, closeWebSocketConnection } from '../services/speedTest';
+import { runSpeedTest, type SpeedTestResult, SpeedDataPoint } from '../services/speedTest';
 import SpeedTestProgress from '../components/SpeedTestProgress';
 import SpeedTestHistory from '../components/SpeedTestHistory';
 
@@ -38,11 +38,6 @@ const SpeedTestPage: React.FC = () => {
     } catch (error) {
       console.error('无法加载历史记录:', error);
     }
-    
-    // 在组件卸载时关闭WebSocket连接
-    return () => {
-      closeWebSocketConnection();
-    };
   }, []);
   
   // 保存历史记录
@@ -85,13 +80,6 @@ const SpeedTestPage: React.FC = () => {
     setUploadDataPoints([]);
     
     try {
-      // 初始化WebSocket连接
-      try {
-        await initWebSocketConnection();
-      } catch (wsError) {
-        console.warn('WebSocket连接初始化失败，继续使用HTTP测试:', wsError);
-      }
-      
       // 调用优化后的测速服务
       const result = await runSpeedTest(onProgressUpdate);
       
