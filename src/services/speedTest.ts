@@ -37,8 +37,8 @@ export const runSpeedTest = async (
   // 服务器信息: 5%
   // Ping测试: 10% 
   // 丢包率测试: 15%
-  // 下载测试: 45% (12秒)
-  // 上传测试: 25% (10秒)
+  // 下载测试: 45% (15秒)
+  // 上传测试: 25% (12秒)
   let totalProgress = 0;
   
   // 存储最终结果
@@ -114,19 +114,36 @@ export const runSpeedTest = async (
   
   updateProgress('init', 0);
   try {
-    const info = await getServerInfo();
+    // 设置获取服务器信息的超时处理
+    const timeoutPromise = new Promise<null>((resolve) => {
+      setTimeout(() => resolve(null), 5000); // 5秒超时
+    });
+    
+    // 使用Promise.race确保请求不会无限等待
+    const info = await Promise.race([
+      getServerInfo(),
+      timeoutPromise
+    ]);
+    
     if (info) {
       serverInfo = info;
     }
   } catch (error) {
     console.error('无法获取服务器信息:', error);
+  } finally {
+    // 无论是否成功，都更新进度并继续后续测试步骤
+    await updateProgress('init', 100);
   }
-  await updateProgress('init', 100);
   
   // 1. 测量ping
-  const { ping, jitter } = await measurePing();
-  finalResult.ping = ping;
-  finalResult.jitter = jitter;
+  let pingResult: { ping: number | null; jitter: number | null } = { ping: null, jitter: null };
+  try {
+    pingResult = await measurePing();
+  } catch (error) {
+    console.error('Ping测试失败:', error);
+  }
+  finalResult.ping = pingResult.ping;
+  finalResult.jitter = pingResult.jitter;
   await updateProgress('ping', 100);
   
   // 通知ping测试完成
@@ -136,8 +153,13 @@ export const runSpeedTest = async (
   }
   
   // 2. 测试丢包率
-  const packetLoss = await measurePacketLoss();
-  finalResult.packetLoss = packetLoss;
+  let packetLossResult = null;
+  try {
+    packetLossResult = await measurePacketLoss();
+  } catch (error) {
+    console.error('丢包率测试失败:', error);
+  }
+  finalResult.packetLoss = packetLossResult;
   await updateProgress('packetLoss', 100);
   
   // 通知丢包率测试完成
@@ -154,11 +176,23 @@ export const runSpeedTest = async (
     }
   };
   
-  const { speed: downloadSpeed, dataPoints: downloadDataPoints } = 
-    await testDownloadSpeed(progressDownloadCallback);
+  let downloadSpeed: number | null = null;
+  let downloadDataPoints: SpeedDataPoint[] = [];
   
-  finalResult.downloadSpeed = downloadSpeed;
-  finalResult.downloadDataPoints = downloadDataPoints;
+  try {
+    const result = await testDownloadSpeed(progressDownloadCallback);
+    downloadSpeed = result.speed;
+    downloadDataPoints = result.dataPoints;
+    
+    finalResult.downloadSpeed = downloadSpeed;
+    finalResult.downloadDataPoints = downloadDataPoints;
+  } catch (error) {
+    console.error('下载测试失败:', error);
+    // 确保即使失败也设置一个默认值
+    finalResult.downloadSpeed = null;
+    // 确保进度条完成
+    updateProgress('download', 100);
+  }
   
   // 通知下载测试完成
   if (onStageComplete) {
@@ -178,11 +212,23 @@ export const runSpeedTest = async (
     }
   };
   
-  const { speed: uploadSpeed, dataPoints: uploadDataPoints } = 
-    await testUploadSpeed(progressUploadCallback);
+  let uploadSpeed: number | null = null;
+  let uploadDataPoints: SpeedDataPoint[] = [];
   
-  finalResult.uploadSpeed = uploadSpeed;
-  finalResult.uploadDataPoints = uploadDataPoints;
+  try {
+    const result = await testUploadSpeed(progressUploadCallback);
+    uploadSpeed = result.speed;
+    uploadDataPoints = result.dataPoints;
+    
+    finalResult.uploadSpeed = uploadSpeed;
+    finalResult.uploadDataPoints = uploadDataPoints;
+  } catch (error) {
+    console.error('上传测试失败:', error);
+    // 确保即使失败也设置一个默认值
+    finalResult.uploadSpeed = null;
+    // 确保进度条完成
+    updateProgress('upload', 100);
+  }
   
   // 通知上传测试完成
   if (onStageComplete) {
@@ -194,19 +240,19 @@ export const runSpeedTest = async (
     await smoothTransition(totalProgress, 100, 'upload');
     
     // 最终更新一次，显示上传速度
-    onProgress('upload', 100, uploadSpeed || undefined, uploadDataPoints);
+    onProgress('upload', 100, finalResult.uploadSpeed || undefined, finalResult.uploadDataPoints);
   }
   
   // 返回完整结果
   return {
-    downloadSpeed,
-    uploadSpeed,
-    ping,
-    jitter,
-    packetLoss,
-    testServer: `${serverInfo.name} (${serverInfo.location})`,
+    downloadSpeed: finalResult.downloadSpeed,
+    uploadSpeed: finalResult.uploadSpeed,
+    ping: finalResult.ping,
+    jitter: finalResult.jitter,
+    packetLoss: finalResult.packetLoss,
+    testServer: finalResult.testServer,
     timestamp: Date.now(),
-    downloadDataPoints,
-    uploadDataPoints
+    downloadDataPoints: finalResult.downloadDataPoints || [],
+    uploadDataPoints: finalResult.uploadDataPoints || []
   };
 }; 

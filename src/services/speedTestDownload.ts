@@ -17,8 +17,8 @@ export const testDownloadSpeed = async (
   const downloadUrl = `${SPEED_TEST_SERVER.baseUrl}${SPEED_TEST_SERVER.endpoints.download}`;
   
   // 测试配置
-  const MIN_TEST_DURATION_MS = 10000; // 最小测试时间：10秒
-  const MAX_TEST_DURATION_MS = 12000; // 最大测试时间：12秒
+  const MIN_TEST_DURATION_MS = 8000;  // 最小测试时间：8秒
+  const MAX_TEST_DURATION_MS = 15000; // 最大测试时间：15秒 (修改为15秒)
   const MIN_DATA_POINTS = 5;          // 最小数据点数量
   const INTERVAL_CHECK_MS = 200;      // 速度检查间隔：200毫秒
   const CONNECTION_TIMEOUT_MS = 5000; // 连接超时时间：5秒

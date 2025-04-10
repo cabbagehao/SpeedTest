@@ -18,9 +18,9 @@ export const testUploadSpeed = async (
   const uploadUrl = `${SPEED_TEST_SERVER.baseUrl}${SPEED_TEST_SERVER.endpoints.upload}`;
   
   // 初始化测试配置
-  const MIN_TEST_DURATION_MS = 8000;  // 最小测试时间：8秒
-  const MAX_TEST_DURATION_MS = 10000; // 最大测试时间：10秒
-  const MAX_TOTAL_TEST_DURATION_MS = 15000; // 绝对最大测试时间：15秒（防止卡死）
+  const MIN_TEST_DURATION_MS = 6000;  // 最小测试时间：6秒
+  const MAX_TEST_DURATION_MS = 12000; // 最大测试时间：12秒 (修改为12秒)
+  const MAX_TOTAL_TEST_DURATION_MS = 13000; // 绝对最大测试时间：13秒（防止卡死）
   const MIN_DATA_POINTS = 5; // 最小数据点数量
   const INTERVAL_CHECK_MS = 250; // 速度检查间隔：250毫秒
   

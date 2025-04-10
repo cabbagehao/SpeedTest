@@ -56,19 +56,44 @@ export const createRandomBlob = (size: number): Blob => {
  * 获取服务器信息
  */
 export const getServerInfo = async (): Promise<ServerInfo | null> => {
-  try {
-    const infoUrl = `${SPEED_TEST_SERVER.baseUrl}${SPEED_TEST_SERVER.endpoints.info}`;
-    const response = await fetchWithThrottle(infoUrl);
-    if (response.ok) {
-      const data = await response.json();
-      return {
-        name: data.name,
-        location: data.location
-      };
+  // 最多尝试两次 (初次 + 1次重试)
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const infoUrl = `${SPEED_TEST_SERVER.baseUrl}${SPEED_TEST_SERVER.endpoints.info}`;
+      
+      // 创建AbortController用于请求超时控制
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 2000); // 2秒超时
+      
+      const response = await fetchWithThrottle(infoUrl, {
+        signal: controller.signal
+      });
+      
+      // 清除超时
+      clearTimeout(timeoutId);
+      
+      if (response.ok) {
+        const data = await response.json();
+        return {
+          name: data.name,
+          location: data.location
+        };
+      }
+      
+      // 第一次尝试失败后等待短暂时间再重试
+      if (attempt === 0) {
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+    } catch (error) {
+      console.error(`获取服务器信息失败(尝试 ${attempt + 1}/2):`, error);
+      
+      // 第一次尝试失败后等待短暂时间再重试
+      if (attempt === 0) {
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
     }
-    return null;
-  } catch (error) {
-    console.error('获取服务器信息失败:', error);
-    return null;
   }
+  
+  // 所有尝试都失败
+  return null;
 }; 
