@@ -88,26 +88,26 @@ const SpeedTestProgress: React.FC<SpeedTestProgressProps> = ({
     return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
   };
   
-  // 获取速度单位颜色和描述
-  const getSpeedInfo = () => {
-    if (currentSpeed === undefined) return { color: 'text-gray-500', description: '' };
+  // 获取速度单位颜色
+  const getSpeedColor = () => {
+    if (currentSpeed === undefined) return 'text-gray-500';
     
     if (stage === 'download') {
-      if (currentSpeed < 5) return { color: 'text-red-500', description: '网速较慢' };
-      if (currentSpeed < 20) return { color: 'text-yellow-500', description: '网速一般' };
-      if (currentSpeed < 50) return { color: 'text-green-500', description: '网速良好' };
-      return { color: 'text-blue-500', description: '网速极佳' };
+      if (currentSpeed < 5) return 'text-red-500';
+      if (currentSpeed < 20) return 'text-yellow-500';
+      if (currentSpeed < 50) return 'text-green-500';
+      return 'text-blue-500';
     } else if (stage === 'upload') {
-      if (currentSpeed < 2) return { color: 'text-red-500', description: '网速较慢' };
-      if (currentSpeed < 10) return { color: 'text-yellow-500', description: '网速一般' };
-      if (currentSpeed < 30) return { color: 'text-green-500', description: '网速良好' };
-      return { color: 'text-blue-500', description: '网速极佳' };
+      if (currentSpeed < 2) return 'text-red-500';
+      if (currentSpeed < 10) return 'text-yellow-500';
+      if (currentSpeed < 30) return 'text-green-500';
+      return 'text-blue-500';
     }
     
-    return { color: 'text-gray-500', description: '' };
+    return 'text-gray-500';
   };
   
-  const { color: speedColor, description: speedDescription } = getSpeedInfo();
+  const speedColor = getSpeedColor();
 
   return (
     <div className="w-full">
@@ -124,12 +124,9 @@ const SpeedTestProgress: React.FC<SpeedTestProgressProps> = ({
         </div>
         <div className="text-sm font-medium">
           {progress < 100 && stage !== 'ping' && stage !== 'packetLoss' && currentSpeed !== undefined ? (
-            <div className="flex flex-col items-end">
-              <span className={`font-bold ${speedColor}`}>
-                {currentSpeed.toFixed(2)} Mbps
-              </span>
-              <span className="text-xs text-gray-500">{speedDescription}</span>
-            </div>
+            <span className={`font-bold ${speedColor}`}>
+              {currentSpeed.toFixed(2)} Mbps
+            </span>
           ) : null}
           
           {stage === 'ping' && ping !== undefined && ping !== null && progress === 100 ? 

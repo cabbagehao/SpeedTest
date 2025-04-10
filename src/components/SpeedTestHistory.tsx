@@ -1,12 +1,13 @@
 import React from 'react';
-import { Download, Upload, Zap, Clock, X } from 'lucide-react';
+import { Download, Upload, Zap, Clock, X, Trash2, AlertTriangle } from 'lucide-react';
 import type { SpeedTestResult } from '../services/speedTest';
 
 interface SpeedTestHistoryProps {
   results: SpeedTestResult[];
+  onClearHistory?: () => void;
 }
 
-const SpeedTestHistory: React.FC<SpeedTestHistoryProps> = ({ results }) => {
+const SpeedTestHistory: React.FC<SpeedTestHistoryProps> = ({ results, onClearHistory }) => {
   if (results.length === 0) {
     return null;
   }
@@ -24,10 +25,21 @@ const SpeedTestHistory: React.FC<SpeedTestHistoryProps> = ({ results }) => {
 
   return (
     <div className="mt-6">
-      <h2 className="text-lg font-semibold text-gray-700 mb-4 flex items-center">
-        <Clock className="w-5 h-5 mr-2" />
-        历史记录
-      </h2>
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="text-lg font-semibold text-gray-700 flex items-center">
+          <Clock className="w-5 h-5 mr-2" />
+          历史记录
+        </h2>
+        {onClearHistory && (
+          <button 
+            onClick={onClearHistory}
+            className="flex items-center text-sm text-red-500 hover:text-red-700 transition-colors"
+          >
+            <Trash2 className="w-4 h-4 mr-1" />
+            清除历史
+          </button>
+        )}
+      </div>
       
       <div className="space-y-4 max-h-60 overflow-y-auto">
         {results.map((result, index) => (
@@ -37,48 +49,81 @@ const SpeedTestHistory: React.FC<SpeedTestHistoryProps> = ({ results }) => {
           >
             <div className="flex justify-between items-center mb-2">
               <span className="text-sm text-gray-500">{formatTimestamp(result.timestamp)}</span>
-              <span className="text-xs text-gray-400">{result.testServer}</span>
             </div>
             
             <div className="grid grid-cols-2 gap-4">
               <div className="flex items-center">
                 <Download className="w-4 h-4 text-blue-500 mr-2" />
                 <span className="text-gray-600 text-sm">下载:</span>
-                <span className="font-semibold text-gray-800 ml-1">
-                  {result.downloadSpeed !== null ? `${result.downloadSpeed} Mbps` : '-'}
-                </span>
+                {result.downloadSpeed !== null ? (
+                  <span className="font-semibold text-gray-800 ml-1">
+                    {result.downloadSpeed} Mbps
+                  </span>
+                ) : (
+                  <div className="flex items-center ml-1 text-red-500">
+                    <AlertTriangle className="w-3 h-3 mr-1" />
+                    <span className="text-xs">失败</span>
+                  </div>
+                )}
               </div>
               
               <div className="flex items-center">
                 <Upload className="w-4 h-4 text-green-500 mr-2" />
                 <span className="text-gray-600 text-sm">上传:</span>
-                <span className="font-semibold text-gray-800 ml-1">
-                  {result.uploadSpeed !== null ? `${result.uploadSpeed} Mbps` : '-'}
-                </span>
+                {result.uploadSpeed !== null ? (
+                  <span className="font-semibold text-gray-800 ml-1">
+                    {result.uploadSpeed} Mbps
+                  </span>
+                ) : (
+                  <div className="flex items-center ml-1 text-red-500">
+                    <AlertTriangle className="w-3 h-3 mr-1" />
+                    <span className="text-xs">失败</span>
+                  </div>
+                )}
               </div>
               
               <div className="flex items-center">
                 <Zap className="w-4 h-4 text-indigo-500 mr-2" />
                 <span className="text-gray-600 text-sm">Ping:</span>
-                <span className="font-semibold text-gray-800 ml-1">
-                  {result.ping !== null ? `${result.ping} ms` : '-'}
-                </span>
+                {result.ping !== null ? (
+                  <span className="font-semibold text-gray-800 ml-1">
+                    {result.ping} ms
+                  </span>
+                ) : (
+                  <div className="flex items-center ml-1 text-red-500">
+                    <AlertTriangle className="w-3 h-3 mr-1" />
+                    <span className="text-xs">超时</span>
+                  </div>
+                )}
               </div>
               
               <div className="flex items-center">
                 <span className="text-gray-600 text-sm">抖动:</span>
-                <span className="font-semibold text-gray-800 ml-1">
-                  {result.jitter !== null ? `${result.jitter} ms` : '-'}
-                </span>
+                {result.jitter !== null ? (
+                  <span className="font-semibold text-gray-800 ml-1">
+                    {result.jitter} ms
+                  </span>
+                ) : (
+                  <span className="text-gray-400 ml-1">-</span>
+                )}
               </div>
               
-              {result.packetLoss !== null && (
+              {result.packetLoss !== null ? (
                 <div className="flex items-center col-span-2">
                   <X className="w-4 h-4 text-purple-500 mr-2" />
                   <span className="text-gray-600 text-sm">丢包率:</span>
                   <span className="font-semibold text-gray-800 ml-1">
                     {result.packetLoss}%
                   </span>
+                </div>
+              ) : (
+                <div className="flex items-center col-span-2">
+                  <X className="w-4 h-4 text-purple-500 mr-2" />
+                  <span className="text-gray-600 text-sm">丢包率:</span>
+                  <div className="flex items-center ml-1 text-red-500">
+                    <AlertTriangle className="w-3 h-3 mr-1" />
+                    <span className="text-xs">超时</span>
+                  </div>
                 </div>
               )}
             </div>

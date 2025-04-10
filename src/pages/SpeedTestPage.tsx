@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Download, Upload, Gauge, RefreshCw, Zap, AlertCircle, X } from 'lucide-react';
+import { Download, Upload, Gauge, RefreshCw, Zap, AlertCircle, X, AlertTriangle } from 'lucide-react';
 import { runSpeedTest, type SpeedTestResult, SpeedDataPoint } from '../services/speedTest';
 import SpeedTestProgress from '../components/SpeedTestProgress';
 import SpeedTestHistory from '../components/SpeedTestHistory';
@@ -28,6 +28,9 @@ const SpeedTestPage: React.FC = () => {
   // 历史记录
   const [testHistory, setTestHistory] = useState<SpeedTestResult[]>([]);
   
+  // 已完成的测试阶段
+  const [completedStages, setCompletedStages] = useState<Set<string>>(new Set());
+  
   // 加载历史记录
   useEffect(() => {
     try {
@@ -49,6 +52,12 @@ const SpeedTestPage: React.FC = () => {
     }
   };
 
+  // 清除历史记录
+  const clearHistory = () => {
+    setTestHistory([]);
+    localStorage.removeItem(HISTORY_STORAGE_KEY);
+  };
+
   // 进度回调函数
   const onProgressUpdate = (stage: string, progress: number, speed?: number, dataPoints?: SpeedDataPoint[]) => {
     setTestStage(stage);
@@ -67,6 +76,33 @@ const SpeedTestPage: React.FC = () => {
     }
   };
 
+  // 阶段完成回调函数
+  const onStageComplete = (stageName: string, result: Partial<SpeedTestResult>) => {
+    // 更新已完成阶段集合
+    setCompletedStages(prev => new Set([...prev, stageName]));
+    
+    // 根据阶段更新相应数据
+    if (stageName === 'ping' && result.ping !== undefined && result.jitter !== undefined) {
+      setPing(result.ping);
+      setJitter(result.jitter);
+    }
+    else if (stageName === 'packetLoss' && result.packetLoss !== undefined) {
+      setPacketLoss(result.packetLoss);
+    }
+    else if (stageName === 'download' && result.downloadSpeed !== undefined) {
+      setDownloadSpeed(result.downloadSpeed);
+      if (result.downloadDataPoints) {
+        setDownloadDataPoints(result.downloadDataPoints);
+      }
+    }
+    else if (stageName === 'upload' && result.uploadSpeed !== undefined) {
+      setUploadSpeed(result.uploadSpeed);
+      if (result.uploadDataPoints) {
+        setUploadDataPoints(result.uploadDataPoints);
+      }
+    }
+  };
+
   // 执行网速测试
   const testSpeed = async () => {
     setTesting(true);
@@ -78,19 +114,11 @@ const SpeedTestPage: React.FC = () => {
     setError(null);
     setDownloadDataPoints([]);
     setUploadDataPoints([]);
+    setCompletedStages(new Set());
     
     try {
       // 调用优化后的测速服务
-      const result = await runSpeedTest(onProgressUpdate);
-      
-      // 更新测试结果
-      setDownloadSpeed(result.downloadSpeed);
-      setUploadSpeed(result.uploadSpeed);
-      setPing(result.ping);
-      setJitter(result.jitter);
-      setPacketLoss(result.packetLoss);
-      setDownloadDataPoints(result.downloadDataPoints);
-      setUploadDataPoints(result.uploadDataPoints);
+      const result = await runSpeedTest(onProgressUpdate, onStageComplete);
       
       // 添加到历史记录
       const updatedHistory = [result, ...testHistory].slice(0, 10); // 只保留最近10条记录
@@ -105,6 +133,8 @@ const SpeedTestPage: React.FC = () => {
       setTestStage('');
       setTestProgress(0);
       setCurrentSpeed(undefined);
+      // 不清空completedStages，保留测试阶段完成的记录
+      // setCompletedStages(new Set());
     }
   };
 
@@ -124,9 +154,16 @@ const SpeedTestPage: React.FC = () => {
               <span className="text-lg font-medium text-gray-700">网络延迟</span>
             </div>
             <div>
-              <span className="text-2xl font-bold text-indigo-600">
-                {ping !== null ? `${ping} ms` : '-'}
-              </span>
+              {completedStages.has('ping') && ping === null ? (
+                <div className="flex items-center text-red-500">
+                  <AlertTriangle className="w-5 h-5 mr-1" />
+                  <span className="text-lg font-medium">连接超时</span>
+                </div>
+              ) : (
+                <span className="text-2xl font-bold text-indigo-600">
+                  {ping !== null ? `${ping} ms` : '-'}
+                </span>
+              )}
               {jitter !== null && (
                 <span className="text-sm text-gray-500 ml-2">抖动: {jitter} ms</span>
               )}
@@ -139,9 +176,16 @@ const SpeedTestPage: React.FC = () => {
               <X className="w-6 h-6 text-purple-600" />
               <span className="text-lg font-medium text-gray-700">丢包率</span>
             </div>
-            <span className="text-2xl font-bold text-purple-600">
-              {packetLoss !== null ? `${packetLoss}%` : '-'}
-            </span>
+            {completedStages.has('packetLoss') && packetLoss === null ? (
+              <div className="flex items-center text-red-500">
+                <AlertTriangle className="w-5 h-5 mr-1" />
+                <span className="text-lg font-medium">连接超时</span>
+              </div>
+            ) : (
+              <span className="text-2xl font-bold text-purple-600">
+                {packetLoss !== null ? `${packetLoss}%` : '-'}
+              </span>
+            )}
           </div>
           
           {/* 下载速度 */}
@@ -150,9 +194,16 @@ const SpeedTestPage: React.FC = () => {
               <Download className="w-6 h-6 text-blue-600" />
               <span className="text-lg font-medium text-gray-700">下载速度</span>
             </div>
-            <span className="text-2xl font-bold text-blue-600">
-              {downloadSpeed !== null ? `${downloadSpeed} Mbps` : '-'}
-            </span>
+            {downloadSpeed === null && completedStages.has('download') ? (
+              <div className="flex items-center text-red-500">
+                <AlertTriangle className="w-5 h-5 mr-1" />
+                <span className="text-lg font-medium">连接失败</span>
+              </div>
+            ) : (
+              <span className="text-2xl font-bold text-blue-600">
+                {downloadSpeed !== null ? `${downloadSpeed} Mbps` : '-'}
+              </span>
+            )}
           </div>
           
           {/* 上传速度 */}
@@ -161,9 +212,16 @@ const SpeedTestPage: React.FC = () => {
               <Upload className="w-6 h-6 text-green-600" />
               <span className="text-lg font-medium text-gray-700">上传速度</span>
             </div>
-            <span className="text-2xl font-bold text-green-600">
-              {uploadSpeed !== null ? `${uploadSpeed} Mbps` : '-'}
-            </span>
+            {uploadSpeed === null && completedStages.has('upload') ? (
+              <div className="flex items-center text-red-500">
+                <AlertTriangle className="w-5 h-5 mr-1" />
+                <span className="text-lg font-medium">连接失败</span>
+              </div>
+            ) : (
+              <span className="text-2xl font-bold text-green-600">
+                {uploadSpeed !== null ? `${uploadSpeed} Mbps` : '-'}
+              </span>
+            )}
           </div>
         </div>
 
@@ -209,7 +267,10 @@ const SpeedTestPage: React.FC = () => {
       </div>
 
       {/* 历史记录 */}
-      <SpeedTestHistory results={testHistory} />
+      <SpeedTestHistory 
+        results={testHistory} 
+        onClearHistory={clearHistory}
+      />
 
       <p className="mt-6 text-sm text-gray-500 text-center">
         注意：实际网速可能因多种因素而异，包括网络拥堵、服务器负载和地理位置等

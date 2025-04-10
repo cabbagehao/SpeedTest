@@ -95,7 +95,7 @@ const fetchWithThrottle = async (url: string, options?: RequestInit): Promise<Re
 };
 
 /**
- * 测试下载速度 - 改进版本，持续测试15-30秒
+ * 测试下载速度 - 改进版本，持续测试12秒
  */
 export const testDownloadSpeed = async (
   onProgress: SpeedTestProgressCallback
@@ -107,9 +107,9 @@ export const testDownloadSpeed = async (
   const downloadUrl = `${SPEED_TEST_SERVER.baseUrl}${SPEED_TEST_SERVER.endpoints.download}`;
   
   // 初始化测试配置
-  const MIN_TEST_DURATION_MS = 15000; // 最小测试时间：15秒
-  const MAX_TEST_DURATION_MS = 30000; // 最大测试时间：30秒
-  const MIN_DATA_POINTS = 5; // 最小数据点数量，从10改为5更合理
+  const MIN_TEST_DURATION_MS = 10000; // 最小测试时间：10秒
+  const MAX_TEST_DURATION_MS = 12000; // 最大测试时间：12秒
+  const MIN_DATA_POINTS = 5; // 最小数据点数量
   const INTERVAL_CHECK_MS = 200; // 速度检查间隔：200毫秒
   
   // 预热连接
@@ -189,7 +189,7 @@ export const testDownloadSpeed = async (
   const speedSamples: number[] = []; 
   
   // 并发连接数（使用2个连接提高测试准确性，但不会导致结果翻倍）
-  const CONCURRENT_CONNECTIONS = 1; // 
+  const CONCURRENT_CONNECTIONS = 2; // 增加为2个并发连接，在网络不稳定时可以有更多的重试机会
   let totalBytesDownloaded = 0;
   let lastProgressUpdate = testStartTime;
   let testFinished = false;
@@ -197,6 +197,7 @@ export const testDownloadSpeed = async (
   // 在测试过程中每200ms更新一次进度
   const updateInterval = setInterval(() => {
     const elapsedMs = performance.now() - testStartTime;
+    // 线性进度，12秒内从10%到95%
     const progressPercent = Math.min(95, 10 + (elapsedMs / MAX_TEST_DURATION_MS) * 85);
     
     // 计算当前速度
@@ -236,72 +237,108 @@ export const testDownloadSpeed = async (
   
   // 创建一个下载任务 - 下载单个大文件而不是多个小文件
   const createDownloadTask = async (): Promise<void> => {
-    try {
-      const cacheBuster = Date.now() + '-' + Math.random();
-      // 大文件下载，这里用XL确保文件足够大不会中途下载完
-      // 给每个连接添加标识符，便于调试
-      const connectionId = Math.floor(Math.random() * 1000);
-      console.log(`开始下载连接 #${connectionId}`);
-      
-      const response = await fetchWithThrottle(`${downloadUrl}?size=${TEST_SIZES.XL}&cb=${cacheBuster}&conn=${connectionId}`, { 
-        cache: 'no-store'
-      });
-      
-      const reader = response.body?.getReader();
-      if (!reader) throw new Error('无法获取响应流');
-      
-      // 流式读取响应
-      while (true) {
-        // 如果测试已结束，停止读取
-        if (testFinished) {
-          reader.releaseLock();
-          return;
-        }
+    // 连接重试次数
+    const MAX_RETRIES = 5; // 增加重试次数，在网络不稳定时有更多重试机会
+    let retryCount = 0;
+    
+    const tryDownload = async (): Promise<void> => {
+      try {
+        const cacheBuster = Date.now() + '-' + Math.random();
+        // 大文件下载，这里用XL确保文件足够大不会中途下载完
+        // 给每个连接添加标识符，便于调试
+        const connectionId = Math.floor(Math.random() * 1000);
+        console.log(`开始下载连接 #${connectionId}${retryCount > 0 ? ` (重试 ${retryCount}/${MAX_RETRIES})` : ''}`);
         
-        const { done, value } = await reader.read();
+        // 添加超时控制
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => {
+          controller.abort();
+          console.error(`下载连接 #${connectionId} 请求超时`);
+        }, 3000); // 减少超时时间到3秒，以便更快触发重试
         
-        if (done) {
-          // 如果一个文件下载完成了，但测试还没达到最小时间，则创建新的下载
-          const elapsedMs = performance.now() - testStartTime;
-          if (elapsedMs < MIN_TEST_DURATION_MS && !testFinished) {
-            console.log(`连接 #${connectionId} 下载完成，但测试时间(${(elapsedMs/1000).toFixed(1)}秒)未达到最小要求(${MIN_TEST_DURATION_MS/1000}秒)，继续下载新文件...`);
+        // 添加重试标识到URL，确保每次重试请求都有唯一标识
+        const retryMark = retryCount > 0 ? `&retry=${retryCount}` : '';
+        const response = await fetchWithThrottle(`${downloadUrl}?size=${TEST_SIZES.XL}&cb=${cacheBuster}&conn=${connectionId}${retryMark}`, { 
+          cache: 'no-store',
+          signal: controller.signal
+        });
+        
+        clearTimeout(timeoutId);
+        
+        const reader = response.body?.getReader();
+        if (!reader) throw new Error('无法获取响应流');
+        
+        // 流式读取响应
+        while (true) {
+          // 如果测试已结束，停止读取
+          if (testFinished) {
             reader.releaseLock();
-            // 递归调用自身，创建新的下载连接
-            return createDownloadTask();
-          }
-          break;
-        }
-        
-        // 累计下载的字节数
-        if (value) {
-          totalBytesDownloaded += value.length;
-        }
-        
-        // 检查测试时间
-        const elapsedMs = performance.now() - testStartTime;
-        if (elapsedMs >= MAX_TEST_DURATION_MS) {
-          // 如果达到最大测试时间，主动中断
-          reader.releaseLock();
-          if (!testFinished) {
-            testFinished = true;
             return;
           }
+          
+          const { done, value } = await reader.read();
+          
+          if (done) {
+            // 如果一个文件下载完成了，但测试还没达到最小时间，则创建新的下载
+            const elapsedMs = performance.now() - testStartTime;
+            if (elapsedMs < MIN_TEST_DURATION_MS && !testFinished) {
+              console.log(`连接 #${connectionId} 下载完成，但测试时间(${(elapsedMs/1000).toFixed(1)}秒)未达到最小要求(${MIN_TEST_DURATION_MS/1000}秒)，继续下载新文件...`);
+              reader.releaseLock();
+              // 递归调用自身，创建新的下载连接
+              return createDownloadTask();
+            }
+            break;
+          }
+          
+          // 累计下载的字节数
+          if (value) {
+            totalBytesDownloaded += value.length;
+          }
+          
+          // 检查测试时间
+          const elapsedMs = performance.now() - testStartTime;
+          if (elapsedMs >= MAX_TEST_DURATION_MS) {
+            // 如果达到最大测试时间，主动中断
+            reader.releaseLock();
+            if (!testFinished) {
+              testFinished = true;
+              return;
+            }
+          }
+        }
+        
+        reader.releaseLock();
+      } catch (error) {
+        // 确保记录详细的错误信息
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        console.error(`下载任务失败 (连接或重试 #${retryCount}): ${errorMessage}`);
+        
+        // 重试逻辑，确保在网络问题时会继续尝试
+        if (!testFinished) { // 首先检查测试是否已结束
+          if (retryCount < MAX_RETRIES) {
+            retryCount++;
+            console.log(`下载失败，尝试第 ${retryCount}/${MAX_RETRIES} 次重试...`);
+            // 短暂延迟后重试
+            await new Promise(resolve => setTimeout(resolve, 300)); // 进一步减少重试间隔时间
+            return tryDownload(); // 返回重试调用
+          } else {
+            // 重试次数用尽
+            console.warn(`重试次数已用尽(${MAX_RETRIES}次)，此连接将不再重试`);
+            
+            // 如果测试时间不足，尝试新的下载任务
+            const elapsedMs = performance.now() - testStartTime;
+            if (elapsedMs < MIN_TEST_DURATION_MS) {
+              console.log('下载任务失败且重试次数用尽，但测试时间不足，创建新的下载任务...');
+              // 短暂延迟后重试
+              await new Promise(resolve => setTimeout(resolve, 300)); // 减少新任务创建的延迟
+              return createDownloadTask();
+            }
+          }
         }
       }
-      
-      reader.releaseLock();
-    } catch (error) {
-      console.error('下载任务失败:', error);
-      
-      // 如果下载失败但测试时间不足，尝试重新开始新的下载
-      const elapsedMs = performance.now() - testStartTime;
-      if (elapsedMs < MIN_TEST_DURATION_MS && !testFinished) {
-        console.log('下载任务失败，但测试时间不足，尝试重新下载...');
-        // 短暂延迟后重试
-        await new Promise(resolve => setTimeout(resolve, 500));
-        return createDownloadTask();
-      }
-    }
+    };
+    
+    await tryDownload();
   };
   
   // 启动固定数量的并发下载
@@ -320,6 +357,9 @@ export const testDownloadSpeed = async (
         console.log(`达到测试结束条件: 已测试${(elapsedMs/1000).toFixed(1)}秒, 收集${dataPoints.length}个数据点, 下载${(totalBytesDownloaded/(1024*1024)).toFixed(2)}MB`);
         testFinished = true;
         clearInterval(checkInterval);
+        clearInterval(updateInterval);
+        // 确保进度显示为95%
+        onProgress('download', 95, (totalBytesDownloaded * 8) / (elapsedMs / 1000) / (1024 * 1024) / (throttleSettings.enabled ? CONCURRENT_CONNECTIONS : 1), dataPoints);
         resolve();
       } else if (testFinished) {
         clearInterval(checkInterval);
@@ -330,6 +370,9 @@ export const testDownloadSpeed = async (
         console.warn('下载测试超时，强制结束');
         testFinished = true;
         clearInterval(checkInterval);
+        clearInterval(updateInterval);
+        // 确保进度显示为95%
+        onProgress('download', 95, (totalBytesDownloaded * 8) / (elapsedMs / 1000) / (1024 * 1024) / (throttleSettings.enabled ? CONCURRENT_CONNECTIONS : 1), dataPoints);
         resolve();
       }
     }, 500);
@@ -443,7 +486,7 @@ const createRandomBlob = (size: number): Blob => {
 };
 
 /**
- * 测试上传速度 - 改进版本，持续测试15-30秒
+ * 测试上传速度 - 改进版本，持续测试10秒
  */
 export const testUploadSpeed = async (
   onProgress: SpeedTestProgressCallback
@@ -456,9 +499,9 @@ export const testUploadSpeed = async (
   const uploadUrl = `${SPEED_TEST_SERVER.baseUrl}${SPEED_TEST_SERVER.endpoints.upload}`;
   
   // 初始化测试配置
-  const MIN_TEST_DURATION_MS = 15000; // 最小测试时间：15秒
-  const MAX_TEST_DURATION_MS = 30000; // 最大测试时间：30秒
-  const MAX_TOTAL_TEST_DURATION_MS = 45000; // 绝对最大测试时间：45秒（防止卡死）
+  const MIN_TEST_DURATION_MS = 8000;  // 最小测试时间：8秒
+  const MAX_TEST_DURATION_MS = 10000; // 最大测试时间：10秒
+  const MAX_TOTAL_TEST_DURATION_MS = 15000; // 绝对最大测试时间：15秒（防止卡死）
   const MIN_DATA_POINTS = 5; // 最小数据点数量
   const INTERVAL_CHECK_MS = 250; // 速度检查间隔：250毫秒
   
@@ -555,6 +598,7 @@ export const testUploadSpeed = async (
   // 在测试过程中定期更新进度
   const updateInterval = setInterval(() => {
     const elapsedMs = performance.now() - testStartTime;
+    // 线性进度，10秒内从10%到95%
     const progressPercent = Math.min(95, 10 + (elapsedMs / MAX_TEST_DURATION_MS) * 85);
     
     // 计算当前速度
@@ -584,19 +628,6 @@ export const testUploadSpeed = async (
     
     // 检查是否达到最大测试时间
     if (elapsedMs >= MAX_TEST_DURATION_MS && !testFinished) {
-      testFinished = true;
-      clearInterval(updateInterval);
-    }
-    
-    // 长时间没有数据上传，可能卡住了
-    if (elapsedMs > 8000 && totalBytesUploaded === 0 && !testFinished) {
-      console.warn('上传测试可能卡住了，没有数据被上传');
-      // 不立即终止，再给一点时间
-    }
-    
-    // 如果超过20秒还没有任何数据上传，直接终止测试
-    if (elapsedMs > 20000 && totalBytesUploaded === 0 && !testFinished) {
-      console.error('上传测试卡住了，强制终止');
       testFinished = true;
       clearInterval(updateInterval);
     }
@@ -658,6 +689,9 @@ export const testUploadSpeed = async (
       if (performance.now() - testStartTime >= MAX_TEST_DURATION_MS) {
         console.log('达到最大测试时间，结束上传测试');
         testFinished = true;
+        clearInterval(updateInterval);
+        // 确保进度显示为95%
+        onProgress('upload', 95, (totalBytesUploaded * 8) / (MAX_TEST_DURATION_MS / 1000) / (1024 * 1024), dataPoints);
         break;
       }
       
@@ -676,6 +710,9 @@ export const testUploadSpeed = async (
           (dataPoints.length >= MIN_DATA_POINTS || totalBytesUploaded > 0)) {
         console.log('达到最小测试条件，结束上传测试');
         testFinished = true;
+        clearInterval(updateInterval);
+        // 确保进度显示为95%
+        onProgress('upload', 95, (totalBytesUploaded * 8) / (elapsedMs / 1000) / (1024 * 1024), dataPoints);
         break;
       }
     }
@@ -787,18 +824,21 @@ export const getServerInfo = async (): Promise<{ name: string; location: string 
  * 执行完整的网速测试
  */
 export const runSpeedTest = async (
-  onProgress: SpeedTestProgressCallback
+  onProgress: SpeedTestProgressCallback,
+  onStageComplete?: (stageName: string, result: Partial<SpeedTestResult>) => void
 ): Promise<SpeedTestResult> => {
-  // 进度分配 - 总进度为100%
+  // 进度分配 - 总进度为100%，根据测试时间分配
   // 服务器信息: 5%
-  // Ping测试: 10%
-  // 丢包率测试: 10% 
-  // 下载测试: 45%
-  // 上传测试: 30%
+  // Ping测试: 10% 
+  // 丢包率测试: 15%
+  // 下载测试: 45% (12秒)
+  // 上传测试: 25% (10秒)
   let totalProgress = 0;
   
   // 存储最终结果
-  let finalResult: Partial<SpeedTestResult> = {};
+  let finalResult: Partial<SpeedTestResult> = {
+    timestamp: Date.now()
+  };
   
   // 平滑过渡设置
   const SMOOTH_TRANSITION_INTERVAL = 50; // 更新间隔(ms)
@@ -830,13 +870,13 @@ export const runSpeedTest = async (
         absoluteProgress = 5 + (stageProgress / 100) * 10;
         break;
       case 'packetLoss':
-        absoluteProgress = 15 + (stageProgress / 100) * 10;
+        absoluteProgress = 15 + (stageProgress / 100) * 15;
         break;
       case 'download':
-        absoluteProgress = 25 + (stageProgress / 100) * 45;
+        absoluteProgress = 30 + (stageProgress / 100) * 45;
         break;
       case 'upload':
-        absoluteProgress = 70 + (stageProgress / 100) * 30;
+        absoluteProgress = 75 + (stageProgress / 100) * 25;
         break;
       default:
         absoluteProgress = stageProgress;
@@ -883,10 +923,21 @@ export const runSpeedTest = async (
   finalResult.jitter = jitter;
   await updateProgress('ping', 100);
   
+  // 通知ping测试完成
+  finalResult.testServer = `${serverInfo.name} (${serverInfo.location})`;
+  if (onStageComplete) {
+    onStageComplete('ping', {...finalResult});
+  }
+  
   // 2. 测试丢包率
   const packetLoss = await measurePacketLoss();
   finalResult.packetLoss = packetLoss;
   await updateProgress('packetLoss', 100);
+  
+  // 通知丢包率测试完成
+  if (onStageComplete) {
+    onStageComplete('packetLoss', {...finalResult});
+  }
   
   // 3. 测试下载速度
   const progressDownloadCallback = (stage: string, progress: number, speed?: number, dataPoints?: SpeedDataPoint[]) => {
@@ -903,8 +954,13 @@ export const runSpeedTest = async (
   finalResult.downloadSpeed = downloadSpeed;
   finalResult.downloadDataPoints = downloadDataPoints;
   
+  // 通知下载测试完成
+  if (onStageComplete) {
+    onStageComplete('download', {...finalResult});
+  }
+  
   // 下载完成后，平滑过渡到上传阶段
-  await smoothTransition(totalProgress, 70, 'download');
+  await smoothTransition(totalProgress, 75, 'download');
   
   // 4. 测试上传速度
   const progressUploadCallback = (stage: string, progress: number, speed?: number, dataPoints?: SpeedDataPoint[]) => {
@@ -921,6 +977,11 @@ export const runSpeedTest = async (
   
   finalResult.uploadSpeed = uploadSpeed;
   finalResult.uploadDataPoints = uploadDataPoints;
+  
+  // 通知上传测试完成
+  if (onStageComplete) {
+    onStageComplete('upload', {...finalResult});
+  }
   
   // 上传测试完成后，平滑过渡到100%
   if (totalProgress < 100) {
@@ -947,29 +1008,42 @@ export const runSpeedTest = async (
 /**
  * 测量网络延迟（ping）
  */
-export const measurePing = async (): Promise<{ ping: number; jitter: number }> => {
+export const measurePing = async (): Promise<{ ping: number | null; jitter: number | null }> => {
   const pings: number[] = [];
   const pingUrl = `${SPEED_TEST_SERVER.baseUrl}${SPEED_TEST_SERVER.endpoints.ping}`;
+  let connectionFailed = true;
   
   // 执行5次ping测试
   for (let i = 0; i < 5; i++) {
     const start = performance.now();
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000); // 5秒超时
+      
       const response = await fetchWithThrottle(`${pingUrl}?cb=${Date.now()}`, { 
         method: 'GET',
-        cache: 'no-store'
+        cache: 'no-store',
+        signal: controller.signal
       });
+      
+      clearTimeout(timeoutId);
       const end = performance.now();
       const data = await response.json();
       
       // 减去服务器处理时间得到更准确的网络延迟
       const networkTime = (end - start) - (data.serverProcessingTime || 0);
       pings.push(networkTime);
+      connectionFailed = false;
     } catch (error) {
       console.error('Ping测试失败:', error);
     }
     // 等待一小段时间后再进行下一次测试
     await new Promise(resolve => setTimeout(resolve, 200));
+  }
+  
+  // 如果所有连接都失败，返回null表示超时
+  if (connectionFailed) {
+    return { ping: null, jitter: null };
   }
   
   // 排除最高和最低值，计算平均ping值
@@ -985,18 +1059,20 @@ export const measurePing = async (): Promise<{ ping: number; jitter: number }> =
     return { ping: Math.round(avgPing), jitter: Math.round(jitter) };
   }
   
-  return { ping: 0, jitter: 0 };
+  return { ping: null, jitter: null };
 };
 
 /**
  * 测试丢包率
  */
-export const measurePacketLoss = async (): Promise<number> => {
+export const measurePacketLoss = async (): Promise<number | null> => {
   const packetLossUrl = `${SPEED_TEST_SERVER.baseUrl}${SPEED_TEST_SERVER.endpoints.packetLoss}`;
   
   const totalPackets = 50;
   let receivedPackets = 0;
+  let sentPackets = 0;
   const timeoutMs = 2000; // 2秒超时
+  let allFailed = true;
   
   // 发送多个数据包并计算收到的比例
   for (let i = 0; i < totalPackets; i++) {
@@ -1012,12 +1088,15 @@ export const measurePacketLoss = async (): Promise<number> => {
       }).catch(() => null);
       
       clearTimeout(timeoutId);
+      sentPackets++;
       
       if (response && response.ok) {
         receivedPackets++;
+        allFailed = false;
       }
     } catch (error) {
       // 超时或请求失败视为丢包
+      sentPackets++;
       console.log(`数据包 ${i} 丢失或超时`);
     }
     
@@ -1025,7 +1104,13 @@ export const measurePacketLoss = async (): Promise<number> => {
     await new Promise(resolve => setTimeout(resolve, 50));
   }
   
+  // 如果所有请求都失败，返回null表示无法连接
+  if (allFailed && sentPackets > 0) {
+    return null;
+  }
+  
   // 计算丢包率（百分比）
-  const packetLossRate = ((totalPackets - receivedPackets) / totalPackets) * 100;
+  if (sentPackets === 0) return null;
+  const packetLossRate = ((sentPackets - receivedPackets) / sentPackets) * 100;
   return Number(packetLossRate.toFixed(1));
 }; 
