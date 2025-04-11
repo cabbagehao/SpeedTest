@@ -79,7 +79,7 @@ const LearnPage: React.FC = () => {
     const ArticleComponent = article.component;
     
     return (
-      <div className="backdrop-blur-sm bg-white/50 rounded-2xl shadow-xl p-6 w-full">
+      <div className="bg-white rounded-2xl shadow-xl p-6 w-full">
         <button 
           onClick={handleBackClick}
           className="mb-4 text-indigo-600 hover:text-indigo-800 flex items-center"
@@ -103,7 +103,7 @@ const LearnPage: React.FC = () => {
   
   // 显示文章列表
   return (
-    <div className="backdrop-blur-sm bg-white/50 rounded-2xl shadow-xl p-6 w-full">
+    <div className="bg-white rounded-2xl shadow-xl p-6 w-full">
       <h1 className="text-3xl font-bold text-gray-800 mb-6">网速课堂</h1>
       <p className="text-gray-600 mb-8">探索关于互联网速度、连接质量和网络优化的精选文章，提升您的网络体验。</p>
       
@@ -111,7 +111,7 @@ const LearnPage: React.FC = () => {
         {articles.map((article) => (
           <div 
             key={article.id}
-            className="border border-gray-200 rounded-lg p-5 hover:shadow-md transition-shadow cursor-pointer bg-white/70"
+            className="border border-gray-200 rounded-lg p-5 hover:shadow-md transition-shadow cursor-pointer"
             onClick={() => handleArticleClick(article.id)}
           >
             <h2 className="text-xl font-semibold text-gray-800 mb-2 flex items-start">
