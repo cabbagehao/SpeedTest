@@ -180,7 +180,7 @@ const LeaderboardPage: React.FC = () => {
   };
   
   return (
-    <div className="bg-white rounded-2xl shadow-xl p-6 w-full">
+    <div className="backdrop-blur-sm bg-white/50 rounded-2xl shadow-xl p-6 w-full">
       <div className="flex items-center mb-6">
         <Trophy className="w-7 h-7 text-indigo-600 mr-2" />
         <h1 className="text-3xl font-bold text-gray-800">网速排行榜</h1>
@@ -196,7 +196,7 @@ const LeaderboardPage: React.FC = () => {
               className={`flex items-center px-3 py-2 rounded-md ${
                 sortBy === 'download' 
                   ? 'bg-indigo-600 text-white' 
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  : 'bg-gray-100/80 text-gray-700 hover:bg-gray-200/80'
               }`}
             >
               <Download className="w-4 h-4 mr-1" />
@@ -207,7 +207,7 @@ const LeaderboardPage: React.FC = () => {
               className={`flex items-center px-3 py-2 rounded-md ${
                 sortBy === 'upload' 
                   ? 'bg-indigo-600 text-white' 
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  : 'bg-gray-100/80 text-gray-700 hover:bg-gray-200/80'
               }`}
             >
               <Upload className="w-4 h-4 mr-1" />
@@ -218,7 +218,7 @@ const LeaderboardPage: React.FC = () => {
               className={`flex items-center px-3 py-2 rounded-md ${
                 sortBy === 'ping' 
                   ? 'bg-indigo-600 text-white' 
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  : 'bg-gray-100/80 text-gray-700 hover:bg-gray-200/80'
               }`}
             >
               <Zap className="w-4 h-4 mr-1" />
@@ -232,7 +232,7 @@ const LeaderboardPage: React.FC = () => {
           <select
             value={timeRange}
             onChange={(e) => setTimeRange(e.target.value as any)}
-            className="bg-gray-100 border border-gray-300 text-gray-700 rounded-md px-3 py-2"
+            className="bg-gray-100/80 border border-gray-300 text-gray-700 rounded-md px-3 py-2"
           >
             <option value="day">今日</option>
             <option value="week">本周</option>
@@ -245,7 +245,7 @@ const LeaderboardPage: React.FC = () => {
       {/* 排行榜表格 */}
       <div className="overflow-x-auto">
         <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
+          <thead className="bg-gray-50/80">
             <tr>
               <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-12">
                 排名

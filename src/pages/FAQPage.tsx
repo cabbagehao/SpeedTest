@@ -150,7 +150,7 @@ const FAQPage: React.FC = () => {
   ];
   
   return (
-    <div className="bg-white rounded-2xl shadow-xl p-6 w-full">
+    <div className="backdrop-blur-sm bg-white/50 rounded-2xl shadow-xl p-6 w-full">
       <h1 className="text-3xl font-bold text-gray-800 mb-6">常见问题 (FAQ)</h1>
       
       <div className="space-y-4">
@@ -161,7 +161,7 @@ const FAQPage: React.FC = () => {
           >
             <button
               className={`w-full px-6 py-4 text-left flex justify-between items-center ${
-                openIndex === index ? 'bg-indigo-50' : 'bg-white'
+                openIndex === index ? 'bg-indigo-50/80' : 'bg-white/70'
               }`}
               onClick={() => toggleFAQ(index)}
             >
@@ -172,7 +172,7 @@ const FAQPage: React.FC = () => {
               }
             </button>
             {openIndex === index && (
-              <div className="px-6 py-4 bg-white text-gray-700 leading-relaxed">
+              <div className="px-6 py-4 bg-white/80 text-gray-700 leading-relaxed">
                 {faq.answer}
               </div>
             )}
