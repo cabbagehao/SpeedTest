@@ -266,7 +266,7 @@ const SpeedTestPage: React.FC = () => {
         </button>
       </div>
 
-      {/* 历史记录 */}
+      {/* 历史记录侧边栏组件 - 独立显示在页面右侧 */}
       <SpeedTestHistory 
         results={testHistory} 
         onClearHistory={clearHistory}
