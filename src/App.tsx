@@ -1,46 +1,44 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import SpeedTestPage from './pages/SpeedTestPage';
-import FAQPage from './pages/FAQPage';
-import LearnPage from './pages/LearnPage';
-import LeaderboardPage from './pages/LeaderboardPage';
+import { Routes, Route, useLocation, Navigate } from 'react-router-dom';
 import Navigation from './components/Navigation';
-import ThrottleTestButton from './components/ThrottleTestButton';
+import SpeedTestPage from './pages/SpeedTestPage';
+import LeaderboardPage from './pages/LeaderboardPage';
+import StreamingTestPage from './pages/StreamingTestPage';
+import WebLoadingTestPage from './pages/WebLoadingTestPage';
+import VideoConferenceTestPage from './pages/VideoConferenceTestPage';
+import GameLatencyTestPage from './pages/GameLatencyTestPage';
+import AdvancedTestPage from './pages/AdvancedTestPage';
+import LearnPage from './pages/LearnPage';
+import FAQPage from './pages/FAQPage';
 
 function App() {
+  const location = useLocation();
+  
   return (
-    <Router>
-      <div className="min-h-screen bg-gradient-to-br from-blue-100 via-indigo-50 to-purple-100 flex flex-col relative overflow-hidden">
-        {/* 背景几何图形装饰 */}
-        <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute -top-24 -right-24 w-96 h-96 rounded-full bg-blue-200 opacity-50 blur-3xl"></div>
-          <div className="absolute top-1/3 -left-24 w-80 h-80 rounded-full bg-indigo-200 opacity-40 blur-3xl"></div>
-          <div className="absolute -bottom-32 right-1/4 w-72 h-72 rounded-full bg-purple-200 opacity-40 blur-3xl"></div>
+    <div className="min-h-screen bg-gray-100 p-4 sm:p-8">
+      <div className="max-w-6xl mx-auto">
+        <Navigation />
+        
+        <div className="mb-8 mt-8">
+          <Routes>
+            <Route path="/" element={<SpeedTestPage />} />
+            <Route path="/leaderboard" element={<LeaderboardPage />} />
+            <Route path="/streaming-test" element={<StreamingTestPage />} />
+            <Route path="/web-loading-test" element={<WebLoadingTestPage />} />
+            <Route path="/video-conference-test" element={<VideoConferenceTestPage />} />
+            <Route path="/game-latency-test" element={<GameLatencyTestPage />} />
+            <Route path="/advanced-test" element={<AdvancedTestPage />} />
+            <Route path="/learn" element={<LearnPage />} />
+            <Route path="/faq" element={<FAQPage />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
         </div>
         
-        {/* 页面级导航栏 - 固定在顶部 */}
-        <div className="w-full bg-white shadow-md sticky top-0 z-10">
-          <div className="container mx-auto px-4">
-            <Navigation />
-          </div>
-        </div>
-        
-        {/* 页面内容 */}
-        <div className="flex-1 flex items-center justify-center p-4 relative z-0">
-          <div className="container max-w-3xl">
-            <Routes>
-              <Route path="/" element={<SpeedTestPage />} />
-              <Route path="/faq" element={<FAQPage />} />
-              <Route path="/learn" element={<LearnPage />} />
-              <Route path="/leaderboard" element={<LeaderboardPage />} />
-            </Routes>
-          </div>
-        </div>
-        
-        {/* 限速测试按钮（只在开发模式显示） */}
-        <ThrottleTestButton />
+        <footer className="text-center text-gray-500 text-sm mt-8">
+          <p>© {new Date().getFullYear()} 闪电测速 - 高性能网络测速工具</p>
+        </footer>
       </div>
-    </Router>
+    </div>
   );
 }
 

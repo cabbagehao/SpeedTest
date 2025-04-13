@@ -3,6 +3,8 @@ import { Download, Upload, Gauge, RefreshCw, Zap, AlertCircle, X, AlertTriangle 
 import { runSpeedTest, type SpeedTestResult, SpeedDataPoint } from '../services/speedTest';
 import SpeedTestProgress from '../components/SpeedTestProgress';
 import SpeedTestHistory from '../components/SpeedTestHistory';
+import TestSettings from '../components/TestSettings';
+import SpeedChart from '../components/SpeedChart';
 
 // 本地存储键
 const HISTORY_STORAGE_KEY = 'speedtest_history';
@@ -57,6 +59,25 @@ const SpeedTestPage: React.FC = () => {
     setTestHistory([]);
     localStorage.removeItem(HISTORY_STORAGE_KEY);
   };
+
+  // 更高频率的数据点更新 (10hz)
+  useEffect(() => {
+    if (!testing || !testStage) return;
+    
+    let intervalId: number;
+    
+    // 如果是下载或上传阶段，每50ms更新一次图表（20Hz）
+    if (testStage === 'download' || testStage === 'upload') {
+      intervalId = window.setInterval(() => {
+        // 强制组件重新渲染以更新图表
+        setTestProgress(prev => prev);
+      }, 50);
+    }
+    
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [testing, testStage]);
 
   // 进度回调函数
   const onProgressUpdate = (stage: string, progress: number, speed?: number, dataPoints?: SpeedDataPoint[]) => {
@@ -264,6 +285,46 @@ const SpeedTestPage: React.FC = () => {
             </>
           )}
         </button>
+        
+        {/* 速度曲线图 */}
+        <div className="space-y-4">
+          <h3 className="text-lg font-medium text-gray-800">实时速度曲线</h3>
+          
+          {/* 下载速度曲线图 */}
+          <div className="bg-gray-50 rounded-xl p-4">
+            <div className="flex items-center mb-2">
+              <Download className="w-5 h-5 text-blue-600 mr-2" />
+              <h4 className="text-sm font-medium text-gray-700">下载速度</h4>
+            </div>
+            <div className="h-44">
+              <SpeedChart 
+                dataPoints={downloadDataPoints}
+                title="下载速度"
+                color="rgb(59, 130, 246)"
+                backgroundColor="rgba(59, 130, 246, 0.1)"
+                currentStage={testStage === 'download' ? testStage : undefined}
+                calculateRealtime={true}
+              />
+            </div>
+          </div>
+          
+          {/* 上传速度曲线图 */}
+          <div className="bg-gray-50 rounded-xl p-4">
+            <div className="flex items-center mb-2">
+              <Upload className="w-5 h-5 text-green-600 mr-2" />
+              <h4 className="text-sm font-medium text-gray-700">上传速度</h4>
+            </div>
+            <div className="h-44">
+              <SpeedChart 
+                dataPoints={uploadDataPoints}
+                title="上传速度"
+                color="rgb(34, 197, 94)"
+                backgroundColor="rgba(34, 197, 94, 0.1)"
+                currentStage={testStage === 'upload' ? testStage : undefined}
+              />
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* 历史记录侧边栏组件 - 独立显示在页面右侧 */}
@@ -275,6 +336,9 @@ const SpeedTestPage: React.FC = () => {
       <p className="mt-6 text-sm text-gray-500 text-center">
         注意：实际网速可能因多种因素而异，包括网络拥堵、服务器负载和地理位置等
       </p>
+
+      {/* 添加测试设置组件 */}
+      <TestSettings />
     </div>
   );
 };

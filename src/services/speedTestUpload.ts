@@ -5,7 +5,7 @@ import { SpeedTestProgressCallback, SpeedDataPoint } from './speedTestTypes';
 import { createRandomBlob } from './speedTestUtils';
 
 /**
- * 测试上传速度 - 改进版本，持续测试10秒
+ * 测试上传速度 - 改进版本，持续测试8-11秒
  */
 export const testUploadSpeed = async (
   onProgress: SpeedTestProgressCallback
@@ -18,11 +18,12 @@ export const testUploadSpeed = async (
   const uploadUrl = `${SPEED_TEST_SERVER.baseUrl}${SPEED_TEST_SERVER.endpoints.upload}`;
   
   // 初始化测试配置
-  const MIN_TEST_DURATION_MS = 6000;  // 最小测试时间：6秒
-  const MAX_TEST_DURATION_MS = 12000; // 最大测试时间：12秒 (修改为12秒)
-  const MAX_TOTAL_TEST_DURATION_MS = 13000; // 绝对最大测试时间：13秒（防止卡死）
+  const MIN_TEST_DURATION_MS = 8000; // 最小测试时间：8秒
+  const MAX_TEST_DURATION_MS = 11000; // 最大测试时间：11秒（最小+3秒）
   const MIN_DATA_POINTS = 5; // 最小数据点数量
-  const INTERVAL_CHECK_MS = 250; // 速度检查间隔：250毫秒
+  const INTERVAL_CHECK_MS = 100; // 速度检查间隔：0.1秒
+  const CONNECTION_TIMEOUT_MS = 2000; // 连接超时时间：2秒
+  const RETRY_DELAY_MS = 1000; // 重试延迟：1秒
   
   // 第一阶段：初步测试，确定网络速度等级
   onProgress('upload', 5, undefined, dataPoints);
@@ -35,7 +36,7 @@ export const testUploadSpeed = async (
     
     // 添加超时保护
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10秒超时
+    const timeoutId = setTimeout(() => controller.abort(), CONNECTION_TIMEOUT_MS); // 使用2秒超时
     
     const startTime = performance.now();
     const response = await fetchWithThrottle(uploadUrl, {
@@ -96,28 +97,19 @@ export const testUploadSpeed = async (
   
   console.log(`根据初始速度 ${initialSpeed.toFixed(2)} Mbps 选择上传块大小: ${(chunkSize / 1024 / 1024).toFixed(2)} MB`);
   
-  // 持续测试 - 固定连接数持续上传
+  // 持续测试 - 单线程上传
   const testStartTime = performance.now();
   const speedSamples: number[] = [];
   
-  // 并发连接数（比之前更少，减少堵塞风险）
-  const CONCURRENT_CONNECTIONS = 1; // 改为单连接，避免服务器压力过大
+  // 单线程上传
+  const CONCURRENT_CONNECTIONS = 1; // 使用单线程上传
   let totalBytesUploaded = 0;
   let lastProgressUpdate = testStartTime;
   let testFinished = false;
   
-  // 添加硬性超时保护
-  const hardTimeoutId = setTimeout(() => {
-    if (!testFinished) {
-      console.warn('上传测试触发硬性超时保护，强制结束测试');
-      testFinished = true;
-    }
-  }, MAX_TOTAL_TEST_DURATION_MS);
-  
   // 在测试过程中定期更新进度
   const updateInterval = setInterval(() => {
     const elapsedMs = performance.now() - testStartTime;
-    // 线性进度，10秒内从10%到95%
     const progressPercent = Math.min(95, 10 + (elapsedMs / MAX_TEST_DURATION_MS) * 85);
     
     // 计算当前速度
@@ -147,38 +139,39 @@ export const testUploadSpeed = async (
     
     // 检查是否达到最大测试时间
     if (elapsedMs >= MAX_TEST_DURATION_MS && !testFinished) {
+      console.log('达到最大测试时间，结束上传测试');
       testFinished = true;
       clearInterval(updateInterval);
     }
+    
+    // 检查是否长时间无数据
+    if (elapsedMs > 5000 && totalBytesUploaded === 0 && !testFinished) {
+      console.warn('上传测试可能卡住了，没有数据被上传');
+    }
   }, INTERVAL_CHECK_MS);
   
-  // 创建一个简化的上传任务，降低复杂性
+  // 创建一个上传任务
   const createUploadTask = async (): Promise<void> => {
     // 检测测试是否已结束
     if (testFinished) {
       return;
     }
     
-    // 添加重试计数和最大重试次数
-    const MAX_RETRIES = 3;
     let retryCount = 0;
     
-    const tryUpload = async (): Promise<void> => {
+    const tryUpload = async (): Promise<boolean> => {
       try {
-        // 创建随机数据块，使用更小的块减少失败风险
+        // 创建随机数据块
         const blob = createRandomBlob(chunkSize);
         const formData = new FormData();
         formData.append('file', blob, `speedtest_${Date.now()}_${Math.random().toString(36).substring(2, 9)}.bin`);
         
         // 创建超时控制器
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => {
-          controller.abort();
-          console.warn('上传请求超时，已中止');
-        }, 10000); // 10秒超时，比整体测试短
+        const timeoutId = setTimeout(() => controller.abort(), CONNECTION_TIMEOUT_MS); // 使用2秒超时
         
         const connectionId = Math.floor(Math.random() * 1000);
-        console.log(`开始上传连接 #${connectionId}${retryCount > 0 ? ` (重试 ${retryCount}/${MAX_RETRIES})` : ''}`);
+        console.log(`开始上传连接 #${connectionId}${retryCount > 0 ? ` (重试 ${retryCount})` : ''}`);
         
         // 添加重试标识到URL
         const retryMark = retryCount > 0 ? `&retry=${retryCount}` : '';
@@ -194,82 +187,74 @@ export const testUploadSpeed = async (
         if (response.ok) {
           // 累计上传的字节数
           totalBytesUploaded += chunkSize;
+          return true;
         } else {
           console.warn(`上传请求返回非成功状态: ${response.status}`);
           throw new Error(`上传请求失败，状态码: ${response.status}`);
         }
       } catch (error) {
-        // 更详细的错误记录
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        console.error(`上传任务失败 (连接 #${retryCount}): ${errorMessage}`);
-        
-        // 重试逻辑 - 无论测试是否已标记结束，都应该尝试重试
-        // 只有当达到最大重试次数时才真正放弃
-        if (retryCount < MAX_RETRIES) {
-          retryCount++;
-          console.log(`上传失败，尝试第 ${retryCount}/${MAX_RETRIES} 次重试...`);
-          // 短暂等待后继续，避免立即重试造成更多问题
-          await new Promise(resolve => setTimeout(resolve, 1000));
-          return tryUpload();
+        if (error instanceof DOMException && error.name === 'AbortError') {
+          console.warn('上传请求被中止（超时）');
         } else {
-          console.warn(`上传重试次数已用尽(${MAX_RETRIES}次)，此连接将不再重试`);
+          console.error('上传任务失败:', error);
         }
+        return false;
       }
     };
     
-    await tryUpload();
-  };
-  
-  // 简化的测试流程，更可靠地控制测试结束
-  const runUploadTest = async (): Promise<void> => {
-    // 持续上传直到测试结束
-    while (!testFinished) {
-      // 检查是否到达最大测试时间
-      if (performance.now() - testStartTime >= MAX_TEST_DURATION_MS) {
-        console.log('达到最大测试时间，结束上传测试');
-        testFinished = true;
-        clearInterval(updateInterval);
-        // 确保进度显示为95%
-        onProgress('upload', 95, (totalBytesUploaded * 8) / (MAX_TEST_DURATION_MS / 1000) / (1024 * 1024), dataPoints);
-        break;
-      }
+    // 尝试上传，如果失败则重试
+    let success = await tryUpload();
+    
+    while (!success && !testFinished) {
+      retryCount++;
+      console.log(`上传失败，将进行重试...`);
       
-      // 创建上传承诺，最多同时CONCURRENT_CONNECTIONS个
-      const uploadPromises = [];
-      for (let i = 0; i < CONCURRENT_CONNECTIONS; i++) {
-        uploadPromises.push(createUploadTask());
-      }
+      // 短暂等待后重试
+      await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS));
       
-      // 等待所有上传完成
-      await Promise.all(uploadPromises);
+      // 如果测试已结束，不再重试
+      if (testFinished) break;
       
-      // 检查是否已经收集到足够的数据点和测试时间
-      const elapsedMs = performance.now() - testStartTime;
-      if (elapsedMs >= MIN_TEST_DURATION_MS && 
-          (dataPoints.length >= MIN_DATA_POINTS || totalBytesUploaded > 0)) {
-        console.log('达到最小测试条件，结束上传测试');
-        testFinished = true;
-        clearInterval(updateInterval);
-        // 确保进度显示为95%
-        onProgress('upload', 95, (totalBytesUploaded * 8) / (elapsedMs / 1000) / (1024 * 1024), dataPoints);
-        break;
-      }
+      success = await tryUpload();
+    }
+    
+    // 如果测试未结束，立即开始下一次上传
+    if (!testFinished) {
+      // 立即开始下一次上传
+      return createUploadTask();
     }
   };
   
-  // 启动测试并等待完成（添加超时保护）
+  // 简化的测试流程，直接使用单线程上传直到满足测试时间
+  const runUploadTest = async (): Promise<void> => {
+    console.log(`开始上传测试，预计持续${MIN_TEST_DURATION_MS/1000}-${MAX_TEST_DURATION_MS/1000}秒`);
+    
+    // 启动单线程上传
+    await createUploadTask();
+  };
+  
+  // 启动测试并等待完成
   try {
     // 使用Promise.race添加整体超时保护
     await Promise.race([
       runUploadTest(),
       new Promise<void>(resolve => {
-        setTimeout(() => {
-          if (!testFinished) {
-            console.warn('上传测试整体超时');
+        // 当达到最小测试时间且有足够数据时结束测试
+        const checkEndCondition = setInterval(() => {
+          const elapsedMs = performance.now() - testStartTime;
+          if (elapsedMs >= MIN_TEST_DURATION_MS && 
+              (dataPoints.length >= MIN_DATA_POINTS || totalBytesUploaded > 0)) {
+            console.log('达到最小测试条件，结束上传测试');
+            clearInterval(checkEndCondition);
             testFinished = true;
+            resolve();
+          } else if (elapsedMs >= MAX_TEST_DURATION_MS) {
+            console.log('达到最大测试时间，强制结束上传测试');
+            clearInterval(checkEndCondition);
+            testFinished = true;
+            resolve();
           }
-          resolve();
-        }, MAX_TOTAL_TEST_DURATION_MS - 1000); // 比硬性超时早1秒
+        }, 500);
       })
     ]);
   } catch (error) {
@@ -277,7 +262,6 @@ export const testUploadSpeed = async (
   } finally {
     // 清理资源
     clearInterval(updateInterval);
-    clearTimeout(hardTimeoutId);
     testFinished = true;
   }
   

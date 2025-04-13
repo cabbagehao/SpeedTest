@@ -5,14 +5,17 @@ export const DEBUG_MODE = true;
 
 // 测速服务器配置
 export const SPEED_TEST_SERVER = {
-  baseUrl: 'http://localhost:3001/api',
+  baseUrl: '/api',
+  wsUrl: `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}`,
   endpoints: {
     info: '/server-info',
     ping: '/ping',
     download: '/download',
     upload: '/upload',
     uploadChunk: '/upload-chunk',
-    packetLoss: '/packetloss'
+    packetLoss: '/packetloss',
+    clientInfo: '/client-info',
+    saveResult: '/save-result'
   }
 };
 
@@ -25,8 +28,36 @@ export const TEST_SIZES = {
   XL: 'xl'  // 100MB
 };
 
-// 导入全局限速设置
-import { throttleSettings } from '../components/ThrottleTestSettings';
+// 测试设置配置
+export const testSettings = {
+  // 文件大小设置
+  downloadFileSize: TEST_SIZES.S,  // 下载文件大小，默认1MB
+  uploadFileSize: TEST_SIZES.S,    // 上传文件大小，默认1MB
+  
+  // 测试时间设置 (毫秒)
+  downloadTestDuration: {
+    min: 12000, // 最小测试时间，默认12秒
+    max: 15000  // 最大测试时间，默认15秒 (最小值+3秒)
+  },
+  uploadTestDuration: {
+    min: 8000,  // 最小测试时间，默认8秒
+    max: 11000  // 最大测试时间，默认11秒 (最小值+3秒)
+  },
+  
+  // 是否使用自动文件大小，默认为true（不使用手动选择）
+  autoFileSize: true
+};
+
+/**
+ * 更新测试设置
+ */
+export const updateTestSettings = (settings: Partial<typeof testSettings>): void => {
+  Object.assign(testSettings, settings);
+  
+  if (DEBUG_MODE) {
+    console.log('[测试设置] 已更新:', testSettings);
+  }
+};
 
 /**
  * 开发模式下的限速测试
@@ -47,27 +78,6 @@ export const runThrottleTest = (fileSize: string, throttleKBps: number): string 
  * 带限速控制的通用下载函数
  */
 export const fetchWithThrottle = async (url: string, options?: RequestInit): Promise<Response> => {
-  // 检查是否应用限速设置
-  if (import.meta.env.MODE === 'development' && 
-      throttleSettings.enabled && 
-      throttleSettings.throttleKBps > 0) {
-    
-    // 在URL中添加限速参数 (KB/s)
-    const throttleKBps = throttleSettings.throttleKBps;
-    const separator = url.includes('?') ? '&' : '?';
-    
-    // 向服务器传递KB/s值，服务器端会进行bit/s换算
-    const throttledUrl = `${url}${separator}throttle=${throttleKBps}`;
-    
-    if (DEBUG_MODE) {
-      console.log(`[限速测试] 应用限速: ${throttleKBps} KB/s (${(throttleKBps * 8 / 1024).toFixed(2)} Mbps), URL: ${url.substring(0, 100)}...`);
-    } else {
-      console.log(`[限速测试] 应用限速: ${throttleKBps} KB/s (${(throttleKBps * 8 / 1024).toFixed(2)} Mbps)`);
-    }
-    
-    return fetch(throttledUrl, options);
-  } else {
-    // 无限速
-    return fetch(url, options);
-  }
+  // 无限速
+  return fetch(url, options);
 }; 

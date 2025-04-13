@@ -1,142 +1,115 @@
 import React, { useState, useEffect } from 'react';
-import { Trophy, Download, Upload, Zap, Calendar, MapPin, Medal, User } from 'lucide-react';
+import { Trophy, Download, Upload, Zap, Calendar, MapPin, Medal, User, Globe, Network, Building } from 'lucide-react';
 import type { SpeedTestResult } from '../services/speedTest';
 
-// 本地存储键
-const HISTORY_STORAGE_KEY = 'speedtest_history';
+// 服务器API基础URL
+const API_BASE_URL = 'http://localhost:3001/api';
 
-// 随机用户姓氏列表
-const surnames = ['李', '王', '张', '刘', '陈', '杨', '赵', '黄', '周', '吴', '徐', '孙', '马', '朱', '胡', '林', '郭', '何', '高', '罗'];
-
-// 随机城市列表
-const cities = ['北京', '上海', '广州', '深圳', '杭州', '成都', '武汉', '西安', '南京', '重庆', '青岛', '长沙', '天津', '苏州', '郑州', '东莞', '沈阳', '济南', '宁波', '厦门'];
-
-// 随机ISP列表
-const isps = ['电信', '联通', '移动', '广电', '铁通', '长城宽带', '鹏博士', '教育网'];
-
-// 生成随机用户
-const generateRandomUser = () => {
-  const surname = surnames[Math.floor(Math.random() * surnames.length)];
-  const userId = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
-  return `${surname}${userId}`;
-};
-
-// 生成随机位置
-const generateRandomLocation = () => {
-  const city = cities[Math.floor(Math.random() * cities.length)];
-  const isp = isps[Math.floor(Math.random() * isps.length)];
-  return { city, isp };
-};
+// 位置信息接口
+interface LocationInfo {
+  anonymizedIp: string;
+  city: string;
+  country: string;
+  continent: string;
+  asn: number;
+  isp: string;
+}
 
 // 扩展测速结果
 interface ExtendedSpeedTestResult extends SpeedTestResult {
-  user: string;
-  location: {
-    city: string;
-    isp: string;
-  };
+  location: LocationInfo;
   rank?: number;
+}
+
+// 过滤选项接口
+interface FilterOptions {
+  cities: string[];
+  countries: string[];
+  asns: { asn: number; isp: string }[];
 }
 
 const LeaderboardPage: React.FC = () => {
   const [leaderboard, setLeaderboard] = useState<ExtendedSpeedTestResult[]>([]);
   const [sortBy, setSortBy] = useState<'download' | 'upload' | 'ping'>('download');
-  const [timeRange, setTimeRange] = useState<'day' | 'week' | 'month' | 'all'>('all');
+  const [filterType, setFilterType] = useState<'global' | 'city' | 'country' | 'asn'>('global');
+  const [filterValue, setFilterValue] = useState<string | null>(null);
+  const [filterOptions, setFilterOptions] = useState<FilterOptions>({ cities: [], countries: [], asns: [] });
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
   
-  // 加载测速历史并创建模拟排行榜
+  // 加载过滤选项
   useEffect(() => {
-    try {
-      // 获取本地存储的测速历史
-      const savedHistory = localStorage.getItem(HISTORY_STORAGE_KEY);
-      let history: SpeedTestResult[] = [];
-      
-      if (savedHistory) {
-        history = JSON.parse(savedHistory);
+    const fetchFilterOptions = async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/leaderboard/filters`);
+        if (!response.ok) {
+          throw new Error('无法获取过滤选项');
+        }
+        
+        const data = await response.json();
+        if (data.success && data.filterOptions) {
+          setFilterOptions(data.filterOptions);
+        }
+      } catch (error) {
+        console.error('获取过滤选项失败:', error);
+        setError('无法加载过滤选项，请稍后再试');
       }
-      
-      // 如果历史记录不足，生成一些模拟数据
-      if (history.length < 20) {
-        const mockData = generateMockData(20 - history.length);
-        history = [...history, ...mockData];
-      }
-      
-      // 为历史记录添加用户和位置信息
-      const extendedHistory: ExtendedSpeedTestResult[] = history.map(result => ({
-        ...result,
-        user: generateRandomUser(),
-        location: generateRandomLocation()
-      }));
-      
-      // 根据选择的时间范围筛选
-      const filteredLeaderboard = filterByTimeRange(extendedHistory, timeRange);
-      
-      // 根据排序条件排序
-      const sortedLeaderboard = sortLeaderboard(filteredLeaderboard, sortBy);
-      
-      // 添加排名
-      const rankedLeaderboard = sortedLeaderboard.map((item, index) => ({
-        ...item,
-        rank: index + 1
-      }));
-      
-      setLeaderboard(rankedLeaderboard);
-    } catch (error) {
-      console.error('无法加载排行榜数据:', error);
-    }
-  }, [sortBy, timeRange]);
+    };
+    
+    fetchFilterOptions();
+  }, []);
   
-  // 生成模拟数据
-  const generateMockData = (count: number): SpeedTestResult[] => {
-    const mockData: SpeedTestResult[] = [];
+  // 加载排行榜数据
+  useEffect(() => {
+    const fetchLeaderboardData = async () => {
+      setLoading(true);
+      setError(null);
+      
+      try {
+        // 构建API请求URL
+        let url = `${API_BASE_URL}/leaderboard?sortBy=${sortBy}`;
+        
+        if (filterType !== 'global' && filterValue) {
+          url += `&filterType=${filterType}&filterValue=${encodeURIComponent(filterValue)}`;
+        }
+        
+        const response = await fetch(url);
+        if (!response.ok) {
+          throw new Error('无法获取排行榜数据');
+        }
+        
+        const data = await response.json();
+        if (data.success && Array.isArray(data.leaderboard)) {
+          // 添加排名
+          const rankedData = data.leaderboard.map((item: any, index: number) => ({
+            ...item,
+            rank: index + 1
+          }));
+          
+          setLeaderboard(rankedData);
+        } else {
+          setLeaderboard([]);
+        }
+      } catch (error) {
+        console.error('获取排行榜数据失败:', error);
+        setError('无法加载排行榜数据，请稍后再试');
+      } finally {
+        setLoading(false);
+      }
+    };
     
-    for (let i = 0; i < count; i++) {
-      mockData.push({
-        downloadSpeed: Math.floor(Math.random() * 500) + 50, // 50-550 Mbps
-        uploadSpeed: Math.floor(Math.random() * 300) + 10,   // 10-310 Mbps
-        ping: Math.floor(Math.random() * 50) + 5,           // 5-55 ms
-        jitter: Math.floor(Math.random() * 20) + 1,         // 1-21 ms
-        packetLoss: parseFloat((Math.random() * 2).toFixed(2)), // 0-2%
-        timestamp: Date.now() - Math.floor(Math.random() * 30 * 24 * 60 * 60 * 1000), // 最近30天内
-        testServer: '默认服务器',
-        downloadDataPoints: [],
-        uploadDataPoints: []
-      });
-    }
-    
-    return mockData;
+    fetchLeaderboardData();
+  }, [sortBy, filterType, filterValue]);
+  
+  // 处理过滤类型变更
+  const handleFilterTypeChange = (type: 'global' | 'city' | 'country' | 'asn') => {
+    setFilterType(type);
+    setFilterValue(null);
   };
   
-  // 根据时间范围筛选数据
-  const filterByTimeRange = (data: ExtendedSpeedTestResult[], range: string): ExtendedSpeedTestResult[] => {
-    const now = Date.now();
-    const dayMs = 24 * 60 * 60 * 1000;
-    
-    switch (range) {
-      case 'day':
-        return data.filter(item => (now - item.timestamp) < dayMs);
-      case 'week':
-        return data.filter(item => (now - item.timestamp) < 7 * dayMs);
-      case 'month':
-        return data.filter(item => (now - item.timestamp) < 30 * dayMs);
-      case 'all':
-      default:
-        return data;
-    }
-  };
-  
-  // 根据条件排序数据
-  const sortLeaderboard = (data: ExtendedSpeedTestResult[], criteria: string): ExtendedSpeedTestResult[] => {
-    return [...data].sort((a, b) => {
-      if (criteria === 'download') {
-        return (b.downloadSpeed || 0) - (a.downloadSpeed || 0);
-      } else if (criteria === 'upload') {
-        return (b.uploadSpeed || 0) - (a.uploadSpeed || 0);
-      } else if (criteria === 'ping') {
-        // 对于ping，数值越小越好
-        return (a.ping || 999) - (b.ping || 999);
-      }
-      return 0;
-    });
+  // 处理过滤值变更
+  const handleFilterValueChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+    setFilterValue(event.target.value);
   };
   
   // 获取排名对应的颜色和图标
@@ -227,107 +200,192 @@ const LeaderboardPage: React.FC = () => {
           </div>
         </div>
         
+        {/* 过滤条件 */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">时间范围</label>
-          <select
-            value={timeRange}
-            onChange={(e) => setTimeRange(e.target.value as any)}
-            className="bg-gray-100 border border-gray-300 text-gray-700 rounded-md px-3 py-2"
-          >
-            <option value="day">今日</option>
-            <option value="week">本周</option>
-            <option value="month">本月</option>
-            <option value="all">全部</option>
-          </select>
+          <label className="block text-sm font-medium text-gray-700 mb-1">地区筛选</label>
+          <div className="flex space-x-2 mb-2">
+            <button
+              onClick={() => handleFilterTypeChange('global')}
+              className={`flex items-center px-3 py-2 rounded-md ${
+                filterType === 'global' 
+                  ? 'bg-indigo-600 text-white' 
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              <Globe className="w-4 h-4 mr-1" />
+              全球
+            </button>
+            <button
+              onClick={() => handleFilterTypeChange('city')}
+              className={`flex items-center px-3 py-2 rounded-md ${
+                filterType === 'city' 
+                  ? 'bg-indigo-600 text-white' 
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              <Building className="w-4 h-4 mr-1" />
+              城市
+            </button>
+            <button
+              onClick={() => handleFilterTypeChange('country')}
+              className={`flex items-center px-3 py-2 rounded-md ${
+                filterType === 'country' 
+                  ? 'bg-indigo-600 text-white' 
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              <MapPin className="w-4 h-4 mr-1" />
+              国家
+            </button>
+            <button
+              onClick={() => handleFilterTypeChange('asn')}
+              className={`flex items-center px-3 py-2 rounded-md ${
+                filterType === 'asn' 
+                  ? 'bg-indigo-600 text-white' 
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              <Network className="w-4 h-4 mr-1" />
+              ISP
+            </button>
+          </div>
+          
+          {/* 根据选择的过滤类型显示不同的下拉选项 */}
+          {filterType !== 'global' && (
+            <select
+              value={filterValue || ''}
+              onChange={handleFilterValueChange}
+              className="bg-gray-100 border border-gray-300 text-gray-700 rounded-md px-3 py-2 w-full"
+            >
+              <option value="">选择{filterType === 'city' ? '城市' : filterType === 'country' ? '国家' : 'ISP'}</option>
+              {filterType === 'city' && filterOptions.cities.map((city) => (
+                <option key={city} value={city}>{city}</option>
+              ))}
+              {filterType === 'country' && filterOptions.countries.map((country) => (
+                <option key={country} value={country}>{country}</option>
+              ))}
+              {filterType === 'asn' && filterOptions.asns.map((asn) => (
+                <option key={asn.asn} value={asn.asn}>{asn.isp} (ASN: {asn.asn})</option>
+              ))}
+            </select>
+          )}
         </div>
       </div>
       
+      {/* 加载状态和错误提示 */}
+      {loading && (
+        <div className="flex justify-center items-center py-8">
+          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600"></div>
+          <span className="ml-3 text-gray-600">正在加载排行榜数据...</span>
+        </div>
+      )}
+      
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-md p-4 mb-6">
+          <p className="text-red-600">{error}</p>
+        </div>
+      )}
+      
       {/* 排行榜表格 */}
-      <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-12">
-                排名
-              </th>
-              <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                用户
-              </th>
-              <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                位置
-              </th>
-              <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                <Download className="w-4 h-4 inline mr-1" />
-                下载
-              </th>
-              <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                <Upload className="w-4 h-4 inline mr-1" />
-                上传
-              </th>
-              <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                <Zap className="w-4 h-4 inline mr-1" />
-                延迟
-              </th>
-              <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                <Calendar className="w-4 h-4 inline mr-1" />
-                测试时间
-              </th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {leaderboard.map((item) => {
-              const rankStyle = getRankDisplay(item.rank || 0);
-              
-              return (
-                <tr 
-                  key={`${item.user}-${item.timestamp}`}
-                  className={`${rankStyle.bgColor} hover:bg-gray-50`}
-                >
-                  <td className="px-3 py-4 whitespace-nowrap">
-                    <div className={`flex items-center justify-center ${rankStyle.color} font-bold`}>
-                      {rankStyle.icon || item.rank}
-                    </div>
-                  </td>
-                  <td className="px-3 py-4 whitespace-nowrap">
-                    <div className="flex items-center">
-                      <User className="w-4 h-4 text-gray-500 mr-2" />
-                      <span className="font-medium">{item.user}</span>
-                    </div>
-                  </td>
-                  <td className="px-3 py-4 whitespace-nowrap">
-                    <div className="flex items-center">
-                      <MapPin className="w-4 h-4 text-gray-500 mr-1" />
-                      <span>{item.location.city} ({item.location.isp})</span>
-                    </div>
-                  </td>
-                  <td className="px-3 py-4 whitespace-nowrap">
-                    <span className={`${sortBy === 'download' ? 'font-bold text-blue-600' : ''}`}>
-                      {item.downloadSpeed} Mbps
-                    </span>
-                  </td>
-                  <td className="px-3 py-4 whitespace-nowrap">
-                    <span className={`${sortBy === 'upload' ? 'font-bold text-green-600' : ''}`}>
-                      {item.uploadSpeed} Mbps
-                    </span>
-                  </td>
-                  <td className="px-3 py-4 whitespace-nowrap">
-                    <span className={`${sortBy === 'ping' ? 'font-bold text-indigo-600' : ''}`}>
-                      {item.ping} ms
-                    </span>
-                  </td>
-                  <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {formatDate(item.timestamp)}
+      {!loading && !error && (
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-12">
+                  排名
+                </th>
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  IP地址
+                </th>
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  位置
+                </th>
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <Download className="w-4 h-4 inline mr-1" />
+                  下载
+                </th>
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <Upload className="w-4 h-4 inline mr-1" />
+                  上传
+                </th>
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <Zap className="w-4 h-4 inline mr-1" />
+                  延迟
+                </th>
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <Calendar className="w-4 h-4 inline mr-1" />
+                  测试时间
+                </th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {leaderboard.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="px-3 py-8 text-center text-gray-500">
+                    暂无排行榜数据
                   </td>
                 </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+              ) : (
+                leaderboard.map((item) => {
+                  const rankStyle = getRankDisplay(item.rank || 0);
+                  
+                  return (
+                    <tr 
+                      key={`${item.location?.anonymizedIp}-${item.timestamp}`}
+                      className={`${rankStyle.bgColor} hover:bg-gray-50`}
+                    >
+                      <td className="px-3 py-4 whitespace-nowrap">
+                        <div className={`flex items-center justify-center ${rankStyle.color} font-bold`}>
+                          {rankStyle.icon || item.rank}
+                        </div>
+                      </td>
+                      <td className="px-3 py-4 whitespace-nowrap">
+                        <div className="flex items-center">
+                          <User className="w-4 h-4 text-gray-500 mr-2" />
+                          <span className="font-medium">{item.location?.anonymizedIp || 'Unknown'}</span>
+                        </div>
+                      </td>
+                      <td className="px-3 py-4 whitespace-nowrap">
+                        <div className="flex items-center">
+                          <MapPin className="w-4 h-4 text-gray-500 mr-1" />
+                          <span>
+                            {item.location?.city || 'Unknown'} 
+                            {item.location?.country && `, ${item.location.country}`}
+                            {item.location?.isp && ` (${item.location.isp})`}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-3 py-4 whitespace-nowrap">
+                        <span className={`${sortBy === 'download' ? 'font-bold text-blue-600' : ''}`}>
+                          {item.downloadSpeed} Mbps
+                        </span>
+                      </td>
+                      <td className="px-3 py-4 whitespace-nowrap">
+                        <span className={`${sortBy === 'upload' ? 'font-bold text-green-600' : ''}`}>
+                          {item.uploadSpeed} Mbps
+                        </span>
+                      </td>
+                      <td className="px-3 py-4 whitespace-nowrap">
+                        <span className={`${sortBy === 'ping' ? 'font-bold text-indigo-600' : ''}`}>
+                          {item.ping} ms
+                        </span>
+                      </td>
+                      <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {formatDate(item.timestamp)}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
       
       <div className="mt-6 text-center text-sm text-gray-500">
-        <p>排行榜基于测速结果生成，展示了不同用户的互联网连接性能对比。</p>
-        <p className="mt-1">自己进行测速后，您可以将结果与其他用户进行比较。</p>
+        <p>排行榜基于真实测速结果生成，展示了不同用户的互联网连接性能对比。</p>
+        <p className="mt-1">自己进行测速后，如果结果超过当前记录，您将进入排行榜。</p>
       </div>
     </div>
   );

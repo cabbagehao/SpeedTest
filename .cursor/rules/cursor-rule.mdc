@@ -1,0 +1,11 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+
+# Your rule content
+
+- You can @ files here
+- 当我提出来增加或者修改功能A时，请只实现功能A的部分，不要顺带把B、C、D功能修改了，除非它们与A有直接业务逻辑关系。  即使要顺带修改B，也请在步骤里*明确体现出来修改内容*
+

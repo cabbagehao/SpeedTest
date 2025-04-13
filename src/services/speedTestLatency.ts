@@ -10,22 +10,28 @@ export const measurePing = async (): Promise<{ ping: number | null; jitter: numb
   const pingUrl = `${SPEED_TEST_SERVER.baseUrl}${SPEED_TEST_SERVER.endpoints.ping}`;
   let connectionFailed = true;
   
-  // 设置总测试时间限制为5秒
-  const testStartTime = performance.now();
-  const MAX_TEST_TIME = 5000; // 最大测试时间5秒
+  // 设置测试时间
+  const MIN_TEST_TIME = 1000; // 最小测试时间1秒
+  const MAX_TEST_TIME = 4000; // 最大测试时间4秒（最小+3秒）
+  const PING_INTERVAL = 100; // 每次ping间隔：0.1秒
+  const PING_TIMEOUT = 2000; // ping超时时间：2秒
   
-  // 执行最多5次ping测试，但总时间不超过5秒
-  for (let i = 0; i < 5; i++) {
-    // 检查是否已超出总测试时间
-    if (performance.now() - testStartTime > MAX_TEST_TIME) {
-      console.log('Ping测试达到最大时间限制');
+  // 测试开始时间
+  const testStartTime = performance.now();
+  
+  // 持续进行ping测试，直到达到最小测试时间
+  while (performance.now() - testStartTime < MAX_TEST_TIME) {
+    // 检查是否已满足最小测试时间且有足够的样本
+    const elapsedTime = performance.now() - testStartTime;
+    if (elapsedTime >= MIN_TEST_TIME && pings.length >= 5) {
+      console.log(`Ping测试已满足最小条件，共${pings.length}个样本，用时${elapsedTime.toFixed(0)}ms`);
       break;
     }
     
     const start = performance.now();
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 2000); // 2秒超时
+      const timeoutId = setTimeout(() => controller.abort(), PING_TIMEOUT);
       
       const response = await fetchWithThrottle(`${pingUrl}?cb=${Date.now()}`, { 
         method: 'GET',
@@ -41,22 +47,22 @@ export const measurePing = async (): Promise<{ ping: number | null; jitter: numb
       const networkTime = (end - start) - (data.serverProcessingTime || 0);
       pings.push(networkTime);
       connectionFailed = false;
+      
+      console.log(`Ping成功: ${networkTime.toFixed(1)}ms`);
     } catch (error) {
       console.error('Ping测试失败:', error);
     }
     
-    // 检查剩余测试时间，调整等待时间
-    const elapsedTime = performance.now() - testStartTime;
-    const remainingTime = MAX_TEST_TIME - elapsedTime;
-    
-    // 如果剩余时间不足以完成另一次测试，则退出循环
-    if (remainingTime < 500) { // 假设最小测试时间为500ms
+    // 等待PING_INTERVAL时间后再发送下一个请求
+    // 除非剩余时间不足以完成另一次测试
+    const remainingTime = MAX_TEST_TIME - (performance.now() - testStartTime);
+    if (remainingTime < PING_TIMEOUT + PING_INTERVAL) {
+      console.log(`Ping测试剩余时间不足，停止发送更多请求`);
       break;
     }
     
-    // 等待一小段时间后再进行下一次测试，但确保不超出总测试时间
-    const waitTime = Math.min(200, remainingTime / 2);
-    await new Promise(resolve => setTimeout(resolve, waitTime));
+    // 短暂等待后继续
+    await new Promise(resolve => setTimeout(resolve, PING_INTERVAL));
   }
   
   // 如果所有连接都失败，返回null表示超时
@@ -64,8 +70,9 @@ export const measurePing = async (): Promise<{ ping: number | null; jitter: numb
     return { ping: null, jitter: null };
   }
   
-  // 排除最高和最低值，计算平均ping值
+  // 分析ping数据
   if (pings.length >= 3) {
+    // 排除最高和最低值，计算平均ping值
     pings.sort((a, b) => a - b);
     const validPings = pings.slice(1, -1);
     const avgPing = validPings.reduce((sum, ping) => sum + ping, 0) / validPings.length;
@@ -74,10 +81,12 @@ export const measurePing = async (): Promise<{ ping: number | null; jitter: numb
     const pingVariance = validPings.reduce((sum, ping) => sum + Math.pow(ping - avgPing, 2), 0) / validPings.length;
     const jitter = Math.sqrt(pingVariance);
     
+    console.log(`Ping测试完成：平均${Math.round(avgPing)}ms，抖动${Math.round(jitter)}ms，共${pings.length}个样本`);
     return { ping: Math.round(avgPing), jitter: Math.round(jitter) };
   } else if (pings.length > 0) {
     // 如果只有1-2个成功的ping，直接使用平均值
     const avgPing = pings.reduce((sum, ping) => sum + ping, 0) / pings.length;
+    console.log(`Ping测试完成(样本少)：平均${Math.round(avgPing)}ms，共${pings.length}个样本`);
     return { ping: Math.round(avgPing), jitter: null };
   }
   
@@ -90,28 +99,34 @@ export const measurePing = async (): Promise<{ ping: number | null; jitter: numb
 export const measurePacketLoss = async (): Promise<number | null> => {
   const packetLossUrl = `${SPEED_TEST_SERVER.baseUrl}${SPEED_TEST_SERVER.endpoints.packetLoss}`;
   
-  const totalPackets = 40; // 改为发送40个数据包
+  // 设置测试时间
+  const MIN_TEST_TIME = 1000; // 最小测试时间1秒
+  const MAX_TEST_TIME = 4000; // 最大测试时间4秒
+  const REQUEST_INTERVAL = 50; // 每次请求间隔：0.05秒
+  const REQUEST_TIMEOUT = 2000; // 请求超时时间：2秒
+  
   let receivedPackets = 0;
   let sentPackets = 0;
-  const timeoutMs = 2000; // 2秒超时
   let allFailed = true;
   
-  // 设置总测试时间限制为5秒
+  // 测试开始时间
   const testStartTime = performance.now();
-  const MAX_TEST_TIME = 5000; // 最大测试时间5秒
   
-  // 发送多个数据包并计算收到的比例
-  for (let i = 0; i < totalPackets; i++) {
-    // 检查是否已超出总测试时间
-    if (performance.now() - testStartTime > MAX_TEST_TIME) {
-      console.log('丢包率测试达到最大时间限制');
+  // 持续发送请求，直到达到最大测试时间
+  while (performance.now() - testStartTime < MAX_TEST_TIME) {
+    // 检查是否已满足最小测试时间且发送了足够的数据包
+    const elapsedTime = performance.now() - testStartTime;
+    if (elapsedTime >= MIN_TEST_TIME && sentPackets >= 10) {
+      console.log(`丢包测试已满足最小条件，已发送${sentPackets}个数据包，用时${elapsedTime.toFixed(0)}ms`);
       break;
     }
     
     try {
-      const id = Date.now() + '-' + i;
+      const id = Date.now() + '-' + sentPackets;
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+      const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
+      
+      sentPackets++;
       
       const response = await fetchWithThrottle(`${packetLossUrl}?id=${id}&cb=${Date.now()}`, { 
         method: 'GET',
@@ -120,31 +135,32 @@ export const measurePacketLoss = async (): Promise<number | null> => {
       }).catch(() => null);
       
       clearTimeout(timeoutId);
-      sentPackets++;
       
       if (response && response.ok) {
         receivedPackets++;
         allFailed = false;
+        console.log(`数据包 ${sentPackets} 接收成功`);
+      } else {
+        console.log(`数据包 ${sentPackets} 丢失`);
       }
     } catch (error) {
       // 超时或请求失败视为丢包
-      sentPackets++;
-      console.log(`数据包 ${i} 丢失或超时`);
+      console.log(`数据包 ${sentPackets} 请求异常: ${error}`);
     }
     
-    // 检查剩余测试时间，调整等待时间
-    const elapsedTime = performance.now() - testStartTime;
-    const remainingTime = MAX_TEST_TIME - elapsedTime;
-    
-    // 如果剩余时间不足以完成另一次测试，则退出循环
-    if (remainingTime < 200) { // 假设最小测试时间为200ms
+    // 等待REQUEST_INTERVAL时间后再发送下一个请求
+    // 除非剩余时间不足以完成另一次测试
+    const remainingTime = MAX_TEST_TIME - (performance.now() - testStartTime);
+    if (remainingTime < REQUEST_TIMEOUT + REQUEST_INTERVAL) {
+      console.log(`丢包测试剩余时间不足，停止发送更多请求`);
       break;
     }
     
-    // 短暂间隔避免网络拥塞
-    const waitTime = Math.min(50, remainingTime / 2);
-    await new Promise(resolve => setTimeout(resolve, waitTime));
+    // 短暂等待后继续
+    await new Promise(resolve => setTimeout(resolve, REQUEST_INTERVAL));
   }
+  
+  console.log(`丢包测试完成：发送${sentPackets}个数据包，接收${receivedPackets}个数据包`);
   
   // 如果所有请求都失败，返回null表示无法连接
   if (allFailed && sentPackets > 0) {
