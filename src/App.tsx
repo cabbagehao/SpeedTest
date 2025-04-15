@@ -15,11 +15,11 @@ function App() {
   const location = useLocation();
   
   return (
-    <div className="min-h-screen bg-gray-100 p-4 sm:p-8">
-      <div className="max-w-6xl mx-auto">
+    <div className="min-h-screen bg-gray-100 p-2 sm:p-4 md:p-8">
+      <div className="max-w-5xl mx-auto">
         <Navigation />
         
-        <div className="mb-8 mt-8">
+        <div className="mb-4 sm:mb-8 mt-4 sm:mt-8">
           <Routes>
             <Route path="/" element={<SpeedTestPage />} />
             <Route path="/leaderboard" element={<LeaderboardPage />} />
@@ -34,7 +34,7 @@ function App() {
           </Routes>
         </div>
         
-        <footer className="text-center text-gray-500 text-sm mt-8">
+        <footer className="text-center text-gray-500 text-xs sm:text-sm mt-4 sm:mt-8">
           <p>© {new Date().getFullYear()} 闪电测速 - 高性能网络测速工具</p>
         </footer>
       </div>

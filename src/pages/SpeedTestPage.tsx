@@ -160,68 +160,68 @@ const SpeedTestPage: React.FC = () => {
   };
 
   return (
-    <div className="bg-white rounded-2xl shadow-xl p-8 w-full">
-      <h1 className="text-3xl font-bold text-center text-gray-800 mb-8">
+    <div className="bg-white rounded-2xl shadow-xl p-4 sm:p-6 md:p-8 w-full max-w-4xl mx-auto">
+      <h1 className="text-2xl sm:text-3xl font-bold text-center text-gray-800 mb-4 sm:mb-8">
         网速测试
       </h1>
 
       {/* 主要测试结果 */}
-      <div className="space-y-6 mb-6">
+      <div className="space-y-4 sm:space-y-6 mb-4 sm:mb-6">
         <div className="bg-gray-50 rounded-xl p-6">
           {/* Ping和抖动 */}
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center space-x-3">
-              <Zap className="w-6 h-6 text-indigo-600" />
-              <span className="text-lg font-medium text-gray-700">网络延迟</span>
+          <div className="flex items-center justify-between mb-3 sm:mb-4">
+            <div className="flex items-center space-x-2 sm:space-x-3">
+              <Zap className="w-5 h-5 sm:w-6 sm:h-6 text-indigo-600" />
+              <span className="text-base sm:text-lg font-medium text-gray-700">网络延迟</span>
             </div>
             <div>
               {completedStages.has('ping') && ping === null ? (
                 <div className="flex items-center text-red-500">
-                  <AlertTriangle className="w-5 h-5 mr-1" />
-                  <span className="text-lg font-medium">连接超时</span>
+                  <AlertTriangle className="w-4 h-4 sm:w-5 sm:h-5 mr-1" />
+                  <span className="text-base sm:text-lg font-medium">连接超时</span>
                 </div>
               ) : (
-                <span className="text-2xl font-bold text-indigo-600">
+                <span className="text-xl sm:text-2xl font-bold text-indigo-600">
                   {ping !== null ? `${ping} ms` : '-'}
                 </span>
               )}
               {jitter !== null && (
-                <span className="text-sm text-gray-500 ml-2">抖动: {jitter} ms</span>
+                <span className="text-xs sm:text-sm text-gray-500 ml-2">抖动: {jitter} ms</span>
               )}
             </div>
           </div>
           
           {/* 丢包率 */}
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center space-x-3">
-              <X className="w-6 h-6 text-purple-600" />
-              <span className="text-lg font-medium text-gray-700">丢包率</span>
+          <div className="flex items-center justify-between mb-3 sm:mb-4">
+            <div className="flex items-center space-x-2 sm:space-x-3">
+              <X className="w-5 h-5 sm:w-6 sm:h-6 text-purple-600" />
+              <span className="text-base sm:text-lg font-medium text-gray-700">丢包率</span>
             </div>
             {completedStages.has('packetLoss') && packetLoss === null ? (
               <div className="flex items-center text-red-500">
-                <AlertTriangle className="w-5 h-5 mr-1" />
-                <span className="text-lg font-medium">连接超时</span>
+                <AlertTriangle className="w-4 h-4 sm:w-5 sm:h-5 mr-1" />
+                <span className="text-base sm:text-lg font-medium">连接超时</span>
               </div>
             ) : (
-              <span className="text-2xl font-bold text-purple-600">
+              <span className="text-xl sm:text-2xl font-bold text-purple-600">
                 {packetLoss !== null ? `${packetLoss}%` : '-'}
               </span>
             )}
           </div>
           
           {/* 下载速度 */}
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center space-x-3">
-              <Download className="w-6 h-6 text-blue-600" />
-              <span className="text-lg font-medium text-gray-700">下载速度</span>
+          <div className="flex items-center justify-between mb-3 sm:mb-4">
+            <div className="flex items-center space-x-2 sm:space-x-3">
+              <Download className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600" />
+              <span className="text-base sm:text-lg font-medium text-gray-700">下载速度</span>
             </div>
             {downloadSpeed === null && completedStages.has('download') ? (
               <div className="flex items-center text-red-500">
-                <AlertTriangle className="w-5 h-5 mr-1" />
-                <span className="text-lg font-medium">连接失败</span>
+                <AlertTriangle className="w-4 h-4 sm:w-5 sm:h-5 mr-1" />
+                <span className="text-base sm:text-lg font-medium">连接失败</span>
               </div>
             ) : (
-              <span className="text-2xl font-bold text-blue-600">
+              <span className="text-xl sm:text-2xl font-bold text-blue-600">
                 {downloadSpeed !== null ? `${downloadSpeed} Mbps` : '-'}
               </span>
             )}
@@ -229,17 +229,17 @@ const SpeedTestPage: React.FC = () => {
           
           {/* 上传速度 */}
           <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <Upload className="w-6 h-6 text-green-600" />
-              <span className="text-lg font-medium text-gray-700">上传速度</span>
+            <div className="flex items-center space-x-2 sm:space-x-3">
+              <Upload className="w-5 h-5 sm:w-6 sm:h-6 text-green-600" />
+              <span className="text-base sm:text-lg font-medium text-gray-700">上传速度</span>
             </div>
             {uploadSpeed === null && completedStages.has('upload') ? (
               <div className="flex items-center text-red-500">
-                <AlertTriangle className="w-5 h-5 mr-1" />
-                <span className="text-lg font-medium">连接失败</span>
+                <AlertTriangle className="w-4 h-4 sm:w-5 sm:h-5 mr-1" />
+                <span className="text-base sm:text-lg font-medium">连接失败</span>
               </div>
             ) : (
-              <span className="text-2xl font-bold text-green-600">
+              <span className="text-xl sm:text-2xl font-bold text-green-600">
                 {uploadSpeed !== null ? `${uploadSpeed} Mbps` : '-'}
               </span>
             )}
@@ -271,32 +271,32 @@ const SpeedTestPage: React.FC = () => {
         <button
           onClick={testSpeed}
           disabled={testing}
-          className="w-full py-4 px-6 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-xl shadow-md transition duration-200 flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-full py-3 sm:py-4 px-4 sm:px-6 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-xl shadow-md transition duration-200 flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {testing ? (
             <>
-              <RefreshCw className="w-5 h-5 animate-spin" />
+              <RefreshCw className="w-4 h-4 sm:w-5 sm:h-5 animate-spin" />
               <span>测试中...</span>
             </>
           ) : (
             <>
-              <Gauge className="w-5 h-5" />
+              <Gauge className="w-4 h-4 sm:w-5 sm:h-5" />
               <span>开始测试</span>
             </>
           )}
         </button>
         
         {/* 速度曲线图 */}
-        <div className="space-y-4">
-          <h3 className="text-lg font-medium text-gray-800">实时速度曲线</h3>
+        <div className="space-y-3 sm:space-y-4">
+          <h3 className="text-base sm:text-lg font-medium text-gray-800">实时速度曲线</h3>
           
           {/* 下载速度曲线图 */}
-          <div className="bg-gray-50 rounded-xl p-4">
-            <div className="flex items-center mb-2">
-              <Download className="w-5 h-5 text-blue-600 mr-2" />
-              <h4 className="text-sm font-medium text-gray-700">下载速度</h4>
+          <div className="bg-gray-50 rounded-xl p-3 sm:p-4">
+            <div className="flex items-center mb-1 sm:mb-2">
+              <Download className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600 mr-1 sm:mr-2" />
+              <h4 className="text-xs sm:text-sm font-medium text-gray-700">下载速度</h4>
             </div>
-            <div className="h-44">
+            <div className="h-32 sm:h-44">
               <SpeedChart 
                 dataPoints={downloadDataPoints}
                 title="下载速度"
@@ -309,12 +309,12 @@ const SpeedTestPage: React.FC = () => {
           </div>
           
           {/* 上传速度曲线图 */}
-          <div className="bg-gray-50 rounded-xl p-4">
-            <div className="flex items-center mb-2">
-              <Upload className="w-5 h-5 text-green-600 mr-2" />
-              <h4 className="text-sm font-medium text-gray-700">上传速度</h4>
+          <div className="bg-gray-50 rounded-xl p-3 sm:p-4">
+            <div className="flex items-center mb-1 sm:mb-2">
+              <Upload className="w-4 h-4 sm:w-5 sm:h-5 text-green-600 mr-1 sm:mr-2" />
+              <h4 className="text-xs sm:text-sm font-medium text-gray-700">上传速度</h4>
             </div>
-            <div className="h-44">
+            <div className="h-32 sm:h-44">
               <SpeedChart 
                 dataPoints={uploadDataPoints}
                 title="上传速度"
@@ -333,7 +333,7 @@ const SpeedTestPage: React.FC = () => {
         onClearHistory={clearHistory}
       />
 
-      <p className="mt-6 text-sm text-gray-500 text-center">
+      <p className="mt-4 sm:mt-6 text-xs sm:text-sm text-gray-500 text-center">
         注意：实际网速可能因多种因素而异，包括网络拥堵、服务器负载和地理位置等
       </p>
 
