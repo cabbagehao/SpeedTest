@@ -37,7 +37,7 @@ const speedTestResultSchema = new mongoose.Schema({
   location: locationSchema,
   testType: {
     type: String,
-    enum: ['basic', 'streaming', 'webloading', 'gamelatency', 'videoconference'],
+    enum: ['basic', 'streaming', 'webloading', 'gamelatency'],
     default: 'basic',
   },
   // 用于排行榜排名和查询

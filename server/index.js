@@ -15,7 +15,6 @@ dotenv.config();
 
 // 导入自定义服务
 const geoIpService = require('./services/geoIpService');
-const dbService = require('./services/dbService');
 
 // 是否使用多进程模式（高并发）
 const ENABLE_CLUSTER = process.env.ENABLE_CLUSTER === 'true';
@@ -108,18 +107,12 @@ async function startServer() {
     fs.mkdirSync(TEST_FILES_DIR, { recursive: true });
   }
 
-  // 初始化GeoIP数据库和MongoDB
+  // 初始化GeoIP数据库
   try {
     // 初始化GeoIP数据库
     const geoIpInitialized = await geoIpService.initGeoIpDatabases();
     if (!geoIpInitialized) {
       writeLog('警告: GeoIP数据库初始化失败，IP位置服务将不可用');
-    }
-    
-    // 连接MongoDB数据库
-    const dbConnected = await dbService.connectDatabase();
-    if (!dbConnected) {
-      writeLog('警告: MongoDB数据库连接失败，排行榜和数据存储功能将不可用');
     }
   } catch (error) {
     writeLog(`错误: 服务初始化失败: ${error.message}`);
@@ -200,49 +193,6 @@ async function startServer() {
         success: false,
         error: 'IP信息查询失败',
         ip: clientIp
-      });
-    }
-  });
-
-  // 路由：排行榜数据
-  app.get('/api/leaderboard', async (req, res) => {
-    try {
-      const sortBy = req.query.sortBy || 'download';
-      const limit = parseInt(req.query.limit, 10) || 100;
-      const filterType = req.query.filterType || 'global';
-      const filterValue = req.query.filterValue || null;
-      
-      const leaderboardData = await dbService.getLeaderboardData(
-        sortBy, limit, filterType, filterValue
-      );
-      
-      res.json({
-        success: true,
-        leaderboard: leaderboardData
-      });
-    } catch (error) {
-      console.error('获取排行榜数据失败:', error);
-      res.status(500).json({
-        success: false,
-        error: '获取排行榜数据失败'
-      });
-    }
-  });
-
-  // 路由：排行榜过滤选项
-  app.get('/api/leaderboard/filters', async (req, res) => {
-    try {
-      const filterOptions = await dbService.getFilterOptions();
-      
-      res.json({
-        success: true,
-        filterOptions
-      });
-    } catch (error) {
-      console.error('获取过滤选项失败:', error);
-      res.status(500).json({
-        success: false,
-        error: '获取过滤选项失败'
       });
     }
   });
@@ -392,20 +342,13 @@ async function startServer() {
       result.locationInfo = geoIpService.lookupIpInfo(clientIp);
       result.timestamp = result.timestamp || Date.now();
       
-      // 保存到数据库
-      const saved = await dbService.saveTestResult(result);
+      // 不再保存到数据库，只记录日志
+      writeLog(`测试结果详情: ${JSON.stringify(result)}`);
       
-      if (saved) {
-        res.json({
-          success: true,
-          message: '测试结果已保存'
-        });
-      } else {
-        res.json({
-          success: false,
-          message: '测试结果保存失败'
-        });
-      }
+      res.json({
+        success: true,
+        message: '测试结果已记录'
+      });
     } catch (error) {
       writeLog(`保存测试结果错误: ${error.message}`);
       res.status(500).json({

@@ -3,13 +3,13 @@
 // 调试模式 - 设置为true可以查看更详细的日志
 const DEBUG_MODE = true;
 
-// 服务器API基础URL
-const API_BASE_URL = 'http://localhost:3001/api';
+// 服务器API基础URL - 修改为使用当前主机地址
+const API_BASE_URL = `${window.location.origin}/api`;
 
 // 测速服务器配置
 const SPEED_TEST_SERVER = {
   baseUrl: API_BASE_URL,
-  wsUrl: 'ws://localhost:3001',
+  wsUrl: `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}`,
   endpoints: {
     info: '/server-info',
     ping: '/ping',
@@ -334,10 +334,6 @@ export const testDownloadSpeed = async (
       // 测试速度 = 总下载字节数 × 8 / 总时间(秒) / 1024² (Mbps)
       let currentSpeedMbps = (totalBytesDownloaded * 8) / (elapsedMs / 1000) / (1024 * 1024);
       
-      // 应用连接数校正因子
-      const connectionCorrectionFactor = CONCURRENT_CONNECTIONS;
-      currentSpeedMbps = currentSpeedMbps / connectionCorrectionFactor;
-      
       // 只有在有意义的变化时才添加数据点
       const lastPoint = dataPoints[dataPoints.length - 1];
       const timeSinceLastUpdate = performance.now() - lastProgressUpdate;
@@ -495,7 +491,7 @@ export const testDownloadSpeed = async (
     const overallSpeedMbps = correctedSpeed;
     
     // 方法2: 稳定区间内的平均速度（排除启动和结束阶段）
-    let stableSpeedSamples = speedSamples.map(speed => speed / connectionCorrectionFactor);
+    let stableSpeedSamples = speedSamples;
     if (stableSpeedSamples.length >= 10) {
       // 排序后去除最低的20%和最高的20%的样本
       stableSpeedSamples = [...stableSpeedSamples].sort((a, b) => a - b);
@@ -1114,12 +1110,11 @@ export const runSpeedTest = async (
   let downloadDataPoints: SpeedDataPoint[] = [];
 
   try {
-    // 下载测试已有内部超时和重试机制，不需要添加额外的超时
-    // 只添加整体超时保护
+    // 增加超时时间
     const downloadTimeoutPromise = new Promise<{ speed: number | null; dataPoints: SpeedDataPoint[] }>((_, reject) => {
       setTimeout(() => {
-        reject(new Error('下载测试超时（3秒）'));
-      }, 3000);
+        reject(new Error('下载测试超时（15秒）'));
+      }, 15000); // 改为15秒，与下载测试最大时间匹配
     });
     
     const result = await Promise.race([
@@ -1134,8 +1129,10 @@ export const runSpeedTest = async (
     finalResult.downloadDataPoints = downloadDataPoints;
   } catch (error) {
     console.error('下载测试失败:', error);
-    // 确保即使失败也设置一个默认值
-    finalResult.downloadSpeed = null;
+    // 检查进度回调是否已经设置了downloadSpeed
+    if (finalResult.downloadSpeed === undefined || finalResult.downloadSpeed === null) {
+      finalResult.downloadSpeed = null;
+    }
     // 确保进度条完成
     updateProgress('download', 100);
   }
@@ -1162,12 +1159,11 @@ export const runSpeedTest = async (
   let uploadDataPoints: SpeedDataPoint[] = [];
 
   try {
-    // 上传测试已有内部超时和重试机制，不需要添加额外的超时
-    // 只添加整体超时保护，避免测试卡住
+    // 增加超时时间
     const uploadTimeoutPromise = new Promise<{ speed: number | null; dataPoints: SpeedDataPoint[] }>((_, reject) => {
       setTimeout(() => {
-        reject(new Error('上传测试超时（3秒）'));
-      }, 3000);
+        reject(new Error('上传测试超时（12秒）'));
+      }, 12000); // 改为12秒，与上传测试最大时间匹配
     });
     
     const result = await Promise.race([
@@ -1182,8 +1178,10 @@ export const runSpeedTest = async (
     finalResult.uploadDataPoints = uploadDataPoints;
   } catch (error) {
     console.error('上传测试失败:', error);
-    // 确保即使失败也设置一个默认值
-    finalResult.uploadSpeed = null;
+    // 检查进度回调是否已经设置了uploadSpeed
+    if (finalResult.uploadSpeed === undefined || finalResult.uploadSpeed === null) {
+      finalResult.uploadSpeed = null;
+    }
     // 确保进度条完成
     updateProgress('upload', 100);
   }

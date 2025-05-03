@@ -26,7 +26,7 @@ const SpeedTestArticle: React.FC = () => {
           <li className="flex">
             <Upload className="w-5 h-5 text-indigo-600 mr-2 flex-shrink-0 mt-0.5" />
             <div>
-              <span className="font-medium">上传速度</span>：衡量从您设备到互联网的数据传输速率。这影响视频会议、云端备份和社交媒体内容上传的性能。
+              <span className="font-medium">上传速度</span>：衡量从您设备到互联网的数据传输速率。这影响在线会议、云端备份和社交媒体内容上传的性能。
             </div>
           </li>
           <li className="flex">

@@ -28,14 +28,14 @@ export interface ServerInfo {
   location: string;
 }
 
-// 流媒体测试结果
+// 在线视频测试结果
 export interface StreamingTestResult {
   canStream1080p: boolean;
   canStream4K: boolean;
   bufferingIndex: number; // 缓冲指数 (0-100)，越低越好
   recommendedQuality: string; // 推荐的最高质量 ('480p' | '720p' | '1080p' | '4K')
-  testDuration: number; // 测试持续时间(ms)
-  timestamp: number;
+  downloadSpeed: number; // 平均下载速度（mbps），这里添加了downloadSpeed字段
+  timestamp?: number;
 }
 
 // 网页加载测试结果
@@ -54,14 +54,5 @@ export interface GameLatencyTestResult {
   jitter: number; // 抖动(ms)
   stability: number; // 稳定性指数(0-100)，越高越好
   servers: string[]; // 测试的游戏服务器
-  timestamp: number;
-}
-
-// 视频会议质量测试结果
-export interface VideoConferenceTestResult {
-  videoQualityScore: number; // 视频质量得分(0-100)
-  audioQualityScore: number; // 音频质量得分(0-100)
-  stability: number; // 稳定性指数(0-100)
-  recommendedParticipants: number; // 推荐的最大参与人数
   timestamp: number;
 } 
