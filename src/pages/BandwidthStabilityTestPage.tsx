@@ -1,6 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Download, Upload, Clock, Play, Pause, RefreshCw, AlertCircle, Settings, Loader } from 'lucide-react';
-import { testDownloadSpeed, testUploadSpeed, SpeedDataPoint } from '../services/speedTest';
+import {
+  testStabilityDownloadSpeed,
+  testStabilityUploadSpeed,
+  SpeedDataPoint
+} from '../services';
 import SpeedChart from '../components/SpeedChart';
 
 const BandwidthStabilityTestPage: React.FC = () => {
@@ -29,7 +33,7 @@ const BandwidthStabilityTestPage: React.FC = () => {
   ];
 
   // 数据稳定阈值（秒），忽略前2秒的数据，避免初始连接不稳定
-  const DATA_STABILITY_THRESHOLD = 2;
+  const DATA_STABILITY_THRESHOLD = 10;
 
   // 测试数据
   const [downloadDataPoints, setDownloadDataPoints] = useState<SpeedDataPoint[]>([]);
@@ -50,6 +54,11 @@ const BandwidthStabilityTestPage: React.FC = () => {
   const timerRef = useRef<number | null>(null);
   const testActiveRef = useRef<boolean>(false);
   const stopTimeoutRef = useRef<number | null>(null);
+
+  // 下载测试处理对象的引用
+  const downloadTestRef = useRef<{ terminateTest: () => void } | null>(null);
+  // 上传测试处理对象的引用
+  const uploadTestRef = useRef<{ terminateTest: () => void } | null>(null);
 
   // 下载测试进度回调
   const onDownloadProgress = (stage: string, progress: number, speed?: number, dataPoints?: SpeedDataPoint[]) => {
@@ -217,11 +226,16 @@ const BandwidthStabilityTestPage: React.FC = () => {
   // 执行下载速度测试
   const runDownloadSpeedTest = async () => {
     try {
-      const result = await testDownloadSpeed(onDownloadProgress);
-      console.log('下载速度测试完成:', result?.speed);
+      console.log('[BandwidthStability] 开始创建下载测试...');
+      const result = await testStabilityDownloadSpeed(onDownloadProgress);
+      console.log('[BandwidthStability] 下载速度测试创建完成, 返回控制对象:', result);
+
+      // 保存终止测试的函数引用
+      downloadTestRef.current = result;
+
       return result.speed;
     } catch (error) {
-      console.error('下载测试失败:', error);
+      console.error('[BandwidthStability] 下载测试失败:', error);
       return null;
     }
   };
@@ -229,11 +243,16 @@ const BandwidthStabilityTestPage: React.FC = () => {
   // 执行上传速度测试
   const runUploadSpeedTest = async () => {
     try {
-      const result = await testUploadSpeed(onUploadProgress);
-      console.log('上传速度测试完成:', result?.speed);
+      console.log('[BandwidthStability] 开始创建上传测试...');
+      const result = await testStabilityUploadSpeed(onUploadProgress);
+      console.log('[BandwidthStability] 上传速度测试创建完成, 返回控制对象:', result);
+
+      // 保存终止测试的函数引用
+      uploadTestRef.current = result;
+
       return result.speed;
     } catch (error) {
-      console.error('上传测试失败:', error);
+      console.error('[BandwidthStability] 上传测试失败:', error);
       return null;
     }
   };
@@ -245,6 +264,8 @@ const BandwidthStabilityTestPage: React.FC = () => {
       setError('请至少选择一种测试类型（上传或下载）');
       return;
     }
+
+    console.log('[BandwidthStability] 开始持续稳定性测试...');
 
     // 清空之前的数据 - 只有开始新测试时才清空
     setDownloadDataPoints([]);
@@ -261,13 +282,15 @@ const BandwidthStabilityTestPage: React.FC = () => {
     // 重置测试完成状态
     setTestCompleted(false);
 
+    // 重置进度条
+    setTestProgress(0);
+
     // 记录测试开始时间
     testStartTimeRef.current = Date.now();
 
     setTesting(true);
     setError(null);
     setElapsedTime(0);
-    setTestProgress(0);
 
     testActiveRef.current = true;
 
@@ -281,6 +304,7 @@ const BandwidthStabilityTestPage: React.FC = () => {
 
       if (elapsed >= durationMs) {
         // 测试完成
+        console.log('[BandwidthStability] 达到预设测试时间，自动停止测试');
         stopContinuousTest();
         return;
       }
@@ -293,53 +317,36 @@ const BandwidthStabilityTestPage: React.FC = () => {
     // 启动循环测试
     const runTestLoop = async () => {
       try {
-        console.log('开始测试循环');
-        // 记录循环执行次数，用于调试
-        let loopCount = 0;
+        console.log('[BandwidthStability] 开始测试循环');
 
+        // 启动测试 - 仅在开始时创建测试连接，而不是每次循环都创建
+        if (enableDownload) {
+          console.log('[BandwidthStability] 创建下载测试...');
+          await runDownloadSpeedTest();
+        }
+
+        if (enableUpload) {
+          console.log('[BandwidthStability] 创建上传测试...');
+          await runUploadSpeedTest();
+        }
+
+        // 持续监控测试状态，直到测试结束
+        let loopCount = 0;
         while (testActiveRef.current) {
           loopCount++;
-          console.log(`测试循环 #${loopCount} 开始`);
-
-          // 根据选项决定执行哪些测试
-          const promises = [];
-
-          if (enableDownload && testActiveRef.current) {
-            promises.push(runDownloadSpeedTest());
-          }
-
-          if (enableUpload && testActiveRef.current) {
-            promises.push(runUploadSpeedTest());
-          }
-
-          // 如果测试已经停止，不再执行测试
-          if (!testActiveRef.current) {
-            console.log('测试已停止，退出测试循环');
-            break;
-          }
-
-          // 执行选择的测试
-          try {
-            await Promise.all(promises);
-            console.log(`测试循环 #${loopCount} 完成`);
-          } catch (error) {
-            console.error(`测试循环 #${loopCount} 出错:`, error);
-            // 即使测试出错，也继续循环，因为这可能只是临时网络问题
-          }
+          // 间隔检查，不进行新的测试创建
+          await new Promise(resolve => setTimeout(resolve, 1000));
 
           // 检查是否应该停止测试
           if (!testActiveRef.current) {
-            console.log('测试标记为停止，退出测试循环');
+            console.log('[BandwidthStability] 测试标记为停止，退出测试循环');
             break;
           }
-
-          // 等待短暂时间后继续下一次测试
-          await new Promise(resolve => setTimeout(resolve, 100));
         }
 
-        console.log('测试循环结束，总共执行了', loopCount, '次循环');
+        console.log('[BandwidthStability] 测试循环结束，总共执行了', loopCount, '次循环');
       } catch (err) {
-        console.error('测试循环出现异常:', err);
+        console.error('[BandwidthStability] 测试循环出现异常:', err);
         setError('测试过程中发生错误，请稍后重试');
         stopContinuousTest();
       }
@@ -347,7 +354,7 @@ const BandwidthStabilityTestPage: React.FC = () => {
 
     // 启动测试循环
     runTestLoop().catch(err => {
-      console.error('测试循环出错:', err);
+      console.error('[BandwidthStability] 测试循环出错:', err);
       setError('测试过程中发生错误，请稍后重试');
       stopContinuousTest();
     });
@@ -355,11 +362,25 @@ const BandwidthStabilityTestPage: React.FC = () => {
 
   // 停止持续测试
   const stopContinuousTest = () => {
+    console.log('[BandwidthStability] 开始停止测试...');
     // 设置停止中状态
     setStoppingTest(true);
 
     // 标记测试已停止，这样新的数据点不会被添加
     testActiveRef.current = false;
+
+    // 终止下载和上传测试
+    if (downloadTestRef.current) {
+      console.log('[BandwidthStability] 终止下载测试');
+      downloadTestRef.current.terminateTest();
+      downloadTestRef.current = null;
+    }
+
+    if (uploadTestRef.current) {
+      console.log('[BandwidthStability] 终止上传测试');
+      uploadTestRef.current.terminateTest();
+      uploadTestRef.current = null;
+    }
 
     // 设置一个3秒超时，确保即使网络关闭缓慢也能恢复UI
     stopTimeoutRef.current = window.setTimeout(() => {
@@ -371,6 +392,7 @@ const BandwidthStabilityTestPage: React.FC = () => {
       setStoppingTest(false);
       // 设置测试完成状态
       setTestCompleted(true);
+      console.log('[BandwidthStability] 测试完全停止 (超时触发)');
       // 注意：这里不清空测试结果统计数据
     }, 3000);
 
@@ -390,6 +412,7 @@ const BandwidthStabilityTestPage: React.FC = () => {
       setStoppingTest(false);
       // 设置测试完成状态
       setTestCompleted(true);
+      console.log('[BandwidthStability] 测试完全停止');
       // 注意：这里不清空测试结果统计数据
     }, Math.random() * 2000 + 500);
   };
@@ -404,6 +427,14 @@ const BandwidthStabilityTestPage: React.FC = () => {
         clearTimeout(stopTimeoutRef.current);
       }
       testActiveRef.current = false;
+
+      // 确保组件卸载时也结束测试
+      if (downloadTestRef.current) {
+        downloadTestRef.current.terminateTest();
+      }
+      if (uploadTestRef.current) {
+        uploadTestRef.current.terminateTest();
+      }
     };
   }, []);
 

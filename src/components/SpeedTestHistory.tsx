@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Download, Upload, Zap, Clock, X, Trash2, AlertTriangle, ChevronRight, ChevronLeft } from 'lucide-react';
-import type { SpeedTestResult } from '../services/speedTest';
+import type { SpeedTestResult } from '../services';
 
 interface SpeedTestHistoryProps {
   results: SpeedTestResult[];
@@ -10,13 +10,13 @@ interface SpeedTestHistoryProps {
 
 const SpeedTestHistory: React.FC<SpeedTestHistoryProps> = ({ results, onClearHistory, onToggle }) => {
   const [isExpanded, setIsExpanded] = useState(false);
-  
+
   // 当展开状态变化时通知父组件
   useEffect(() => {
     if (onToggle) {
       onToggle(isExpanded);
     }
-    
+
     // 触发自定义事件供其他组件监听
     const event = new CustomEvent('history-sidebar-toggle', { detail: { expanded: isExpanded } });
     window.dispatchEvent(event);
@@ -48,7 +48,7 @@ const SpeedTestHistory: React.FC<SpeedTestHistoryProps> = ({ results, onClearHis
         <Clock className="w-5 h-5 mb-1" />
         {isExpanded ? <ChevronRight className="w-5 h-5" /> : <ChevronLeft className="w-5 h-5" />}
       </button>
-      
+
       {/* 历史记录面板 */}
       <div className={`bg-white shadow-lg rounded-l-2xl transition-all duration-300 ease-in-out overflow-hidden ${isExpanded ? 'w-80' : 'w-0'}`}>
         {/* 历史记录内容 - 仅在展开状态显示 */}
@@ -61,7 +61,7 @@ const SpeedTestHistory: React.FC<SpeedTestHistoryProps> = ({ results, onClearHis
               </h2>
               <div className="flex items-center">
                 {onClearHistory && (
-                  <button 
+                  <button
                     onClick={onClearHistory}
                     className="flex items-center text-sm text-red-500 hover:text-red-700 transition-colors"
                   >
@@ -71,7 +71,7 @@ const SpeedTestHistory: React.FC<SpeedTestHistoryProps> = ({ results, onClearHis
                 )}
               </div>
             </div>
-            
+
             {results.length === 0 ? (
               <div className="flex-1 flex items-center justify-center p-4 text-gray-500">
                 暂无历史记录
@@ -80,14 +80,14 @@ const SpeedTestHistory: React.FC<SpeedTestHistoryProps> = ({ results, onClearHis
               <div className="flex-1 overflow-y-auto p-4">
                 <div className="space-y-4">
                   {results.map((result, index) => (
-                    <div 
-                      key={index} 
+                    <div
+                      key={index}
                       className="bg-gray-50 rounded-lg p-4 shadow-sm border border-gray-100"
                     >
                       <div className="flex justify-between items-center mb-2">
                         <span className="text-sm text-gray-500">{formatTimestamp(result.timestamp)}</span>
                       </div>
-                      
+
                       <div className="grid grid-cols-2 gap-4">
                         <div className="flex items-center">
                           <Download className="w-4 h-4 text-blue-500 mr-2" />
@@ -103,7 +103,7 @@ const SpeedTestHistory: React.FC<SpeedTestHistoryProps> = ({ results, onClearHis
                             </div>
                           )}
                         </div>
-                        
+
                         <div className="flex items-center">
                           <Upload className="w-4 h-4 text-green-500 mr-2" />
                           <span className="text-gray-600 text-sm">上传:</span>
@@ -118,7 +118,7 @@ const SpeedTestHistory: React.FC<SpeedTestHistoryProps> = ({ results, onClearHis
                             </div>
                           )}
                         </div>
-                        
+
                         <div className="flex items-center">
                           <Zap className="w-4 h-4 text-indigo-500 mr-2" />
                           <span className="text-gray-600 text-sm">Ping:</span>
@@ -133,7 +133,7 @@ const SpeedTestHistory: React.FC<SpeedTestHistoryProps> = ({ results, onClearHis
                             </div>
                           )}
                         </div>
-                        
+
                         <div className="flex items-center">
                           <span className="text-gray-600 text-sm">抖动:</span>
                           {result.jitter !== null ? (
@@ -144,7 +144,7 @@ const SpeedTestHistory: React.FC<SpeedTestHistoryProps> = ({ results, onClearHis
                             <span className="text-gray-400 ml-1">-</span>
                           )}
                         </div>
-                        
+
                         {result.packetLoss !== null ? (
                           <div className="flex items-center col-span-2">
                             <X className="w-4 h-4 text-purple-500 mr-2" />
@@ -176,4 +176,4 @@ const SpeedTestHistory: React.FC<SpeedTestHistoryProps> = ({ results, onClearHis
   );
 };
 
-export default SpeedTestHistory; 
+export default SpeedTestHistory;

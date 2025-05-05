@@ -28,31 +28,12 @@ export interface ServerInfo {
   location: string;
 }
 
-// 在线视频测试结果
-export interface StreamingTestResult {
-  canStream1080p: boolean;
-  canStream4K: boolean;
-  bufferingIndex: number; // 缓冲指数 (0-100)，越低越好
-  recommendedQuality: string; // 推荐的最高质量 ('480p' | '720p' | '1080p' | '4K')
-  downloadSpeed: number; // 平均下载速度（mbps），这里添加了downloadSpeed字段
-  timestamp?: number;
+// 稳定性测试返回类型
+export interface StabilityTestControl {
+  speed: number | null;
+  dataPoints: SpeedDataPoint[];
+  terminateTest: () => void;
 }
 
-// 网页加载测试结果
-export interface WebLoadingTestResult {
-  averageLoadTime: number; // 平均加载时间(ms)
-  firstContentfulPaint: number; // 首次内容绘制时间(ms)
-  fullLoadTime: number; // 完全加载时间(ms)
-  testSites: string[]; // 测试的网站
-  timestamp: number;
-}
-
-// 游戏延迟测试结果
-export interface GameLatencyTestResult {
-  averagePing: number; // 平均ping值(ms)
-  packetLoss: number; // 丢包率(%)
-  jitter: number; // 抖动(ms)
-  stability: number; // 稳定性指数(0-100)，越高越好
-  servers: string[]; // 测试的游戏服务器
-  timestamp: number;
-} 
+// 测速组件回调类型
+export type StageCompleteCallback = (stageName: string, result: Partial<SpeedTestResult>) => void;

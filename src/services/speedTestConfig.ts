@@ -33,17 +33,17 @@ export const testSettings = {
   // 文件大小设置
   downloadFileSize: TEST_SIZES.S,  // 下载文件大小，默认1MB
   uploadFileSize: TEST_SIZES.S,    // 上传文件大小，默认1MB
-  
+
   // 测试时间设置 (毫秒)
   downloadTestDuration: {
-    min: 12000, // 最小测试时间，默认12秒
-    max: 15000  // 最大测试时间，默认15秒 (最小值+3秒)
+    min: 15000, // 最小测试时间，固定为15秒
+    max: 15000  // 最大测试时间，固定为15秒
   },
   uploadTestDuration: {
     min: 8000,  // 最小测试时间，默认8秒
     max: 11000  // 最大测试时间，默认11秒 (最小值+3秒)
   },
-  
+
   // 是否使用自动文件大小，默认为true（不使用手动选择）
   autoFileSize: true
 };
@@ -53,7 +53,7 @@ export const testSettings = {
  */
 export const updateTestSettings = (settings: Partial<typeof testSettings>): void => {
   Object.assign(testSettings, settings);
-  
+
   if (DEBUG_MODE) {
     console.log('[测试设置] 已更新:', testSettings);
   }
@@ -67,10 +67,10 @@ export const runThrottleTest = (fileSize: string, throttleKBps: number): string 
   // 验证文件大小参数
   const validSizes = Object.values(TEST_SIZES);
   const size = validSizes.includes(fileSize as any) ? fileSize : TEST_SIZES.S;
-  
+
   // 构建限速测试URL
   const downloadUrl = `${SPEED_TEST_SERVER.baseUrl}${SPEED_TEST_SERVER.endpoints.download}?size=${size}&throttle=${throttleKBps}&ts=${Date.now()}`;
-  
+
   return downloadUrl;
 };
 
@@ -80,4 +80,4 @@ export const runThrottleTest = (fileSize: string, throttleKBps: number): string 
 export const fetchWithThrottle = async (url: string, options?: RequestInit): Promise<Response> => {
   // 无限速
   return fetch(url, options);
-}; 
+};

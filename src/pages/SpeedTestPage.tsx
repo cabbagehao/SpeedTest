@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Download, Upload, Gauge, RefreshCw, Zap, AlertCircle, X, AlertTriangle, Info, Activity, Wifi, ChevronsUp, BarChart3 } from 'lucide-react';
-import { runSpeedTest, type SpeedTestResult, SpeedDataPoint } from '../services/speedTest';
+import { runSpeedTest, type SpeedTestResult, SpeedDataPoint } from '../services';
 import SpeedTestProgress from '../components/SpeedTestProgress';
 import SpeedTestHistory from '../components/SpeedTestHistory';
 
@@ -122,6 +122,11 @@ const SpeedTestPage: React.FC = () => {
     setUploadDataPoints([]);
     setCompletedStages(new Set());
 
+    // 清空进度条 - 重置测试阶段和进度
+    setTestStage('');
+    setTestProgress(0);
+    setCurrentSpeed(undefined);
+
     try {
       // 调用优化后的测速服务
       const result = await runSpeedTest(onProgressUpdate, onStageComplete);
@@ -138,11 +143,7 @@ const SpeedTestPage: React.FC = () => {
       setError('测试过程中出现错误，请稍后重试');
     } finally {
       setTesting(false);
-      // 不清空测试阶段和进度
-      // setTestStage('');
-      // setTestProgress(0);
-      // 保留当前速度显示
-      // setCurrentSpeed(undefined);
+      // 不清空测试阶段和进度，保留显示
     }
   };
 

@@ -59,7 +59,37 @@ download_links = [{
   "name": "Google Cloud SDK",
   "url": "https://dl.google.com/dl/cloudsdk/channels/rapid/GoogleCloudSDKInstaller.exe",
   "size": "267328"
-}]
+}, {
+  "name": "Ubuntu 24.04.2 LTS",
+  "url": "https://releases.ubuntu.com/24.04/ubuntu-24.04.2-desktop-amd64.iso",
+  "size": "12876316672"
+},
+ {
+  "name": "Fedora 42 Workstation",
+  "url": "https://mirrors.tuna.tsinghua.edu.cn/fedora/releases/42/Workstation/x86_64/iso/Fedora-Workstation-Live-42-1.1.x86_64.iso",
+  "size": "12876316672"
+},
+ {
+  "name": "Windows Server 2022",
+  "url": "https://software-static.download.prss.microsoft.com/dbazure/888969d5-f34g-4e03-ac9d-1f9786c66749/26100.1742.240906-0331.ge_release_svc_refresh_SERVER_EVAL_x64FRE_en-us.iso",
+  "size": "12876316672"
+},
+ {
+  "name": "原神安装包",
+  "url": "https://download-porter.hoyoverse.com/download-porter/2025/03/27/GenshinImpact_install_202503072011.exe?trace_key=GenshinImpact_install_ua_ef1622db7d7d",
+  "size": "12876316672"
+},
+ {
+  "name": "Manjaro KDE 24.0.7",
+  "url": "https://download.manjaro.org/kde/24.0.7/manjaro-kde-24.0.7-240821-linux69.iso",
+  "size": "12876316672"
+},
+ {
+  "name": "openSUSE Leap 15.6",
+  "url": "https://mirrors.ustc.edu.cn/opensuse/distribution/leap/15.6/iso/openSUSE-Leap-15.6-DVD-aarch64-Build710.3-Media.iso",
+  "size": "12876316672"
+}
+]
 
 def test_single_download_speed():
     """
